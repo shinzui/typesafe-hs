@@ -10,6 +10,12 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-10-21T17:48:29Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-10-21T18:07:26Z
+      mode: "update"
+      note: "Adopt haskell-jitsurei conventions and idiom-review changes across child plans; ADR 0005 records declined patterns"
 ---
 
 # Deliver the initial typesafe-hs client
@@ -104,7 +110,7 @@ EP-4 depends on all of EP-2 and EP-3. The servant `API` type mentions `SystemOne
 - response encoding, so the mock server can reply;
 - error-body parsing, to inspect the `FailureResponse`.
 
-EP-5 depends on all of EP-2 and EP-3 because it binds every schema to a type and exercises both codec directions. It also depends on EP-4's Milestone 1 ("EP-4 M1"). That milestone's accepted output is the `TypeSafe.V1` module exporting `API`, `Endpoints`, `SystemOneEndpoint` and `ModelsEndpoint`, compiling in the library. EP-5 needs it only for its "every operation is bound" check. EP-5's schema-level milestones may therefore start as soon as EP-2 and EP-3 are complete, running alongside EP-4. Only EP-5's operation-binding milestone waits for EP-4 M1.
+EP-5 depends on all of EP-2 and EP-3 because it binds every schema to a type and exercises both codec directions. It also depends on EP-4's Milestone 1 ("EP-4 M1"). That milestone's accepted output is the `TypeSafe.V1` module exporting `API` (`NamedRoutes Routes`), the route record `Routes (..)` with fields `systemOne` and `models`, and the endpoint types `SystemOneEndpoint` and `ModelsEndpoint`, all compiling in the library. EP-5 needs it only for its "every operation is bound" check. EP-5's schema-level milestones may therefore start as soon as EP-2 and EP-3 are complete, running alongside EP-4. Only EP-5's operation-binding milestone waits for EP-4 M1.
 
 EP-6 depends on all of EP-4 and EP-5. The release candidate must contain the whole surface and pass the whole suite.
 
@@ -119,9 +125,9 @@ EP-1 ──┬──> EP-2 ──┬──> EP-4 ──────────�
 
 **`typesafe-hs.cabal` and `cabal.project`.**
 - *Plans:* all.
-- *Owner:* EP-1 defines the package: a common stanza with `GHC2024`, `DuplicateRecordFields`, `OverloadedRecordDot`, `OverloadedStrings` and `-Wall`, the `library` with `hs-source-dirs: src`, and one `test-suite typesafe-hs-test` using `tasty`, with `hs-source-dirs: test` and `main-is: Main.hs`.
+- *Owner:* EP-1 defines the package: a common stanza with `GHC2024`; the haskell-jitsurei baseline extensions `DeriveAnyClass`, `DuplicateRecordFields`, `OverloadedLabels` and `OverloadedStrings`; this project's additions `NoFieldSelectors` and `OverloadedRecordDot`; and `-Wall`. `MultilineStrings` is on in the test suite only. `-Werror=missing-fields` is set in `cabal.project`, not in the `.cabal` file, so `cabal check` stays clean. The package itself has the `library`, with `hs-source-dirs: src`, and one `test-suite typesafe-hs-test` using `tasty`, with `hs-source-dirs: test` and `main-is: Main.hs`.
 - *Later plans:* add their modules to `exposed-modules` or `other-modules`, and add their dependencies to the right stanza.
-- *Bounds:* library bounds must stay inside R12's list. A new library dependency must also be justified in that plan's Decision Log. EP-4 is expected to add `http-client-tls >=0.3 && <0.5`, and `http-client ^>=0.7` only if it is named directly. EP-3 is expected to add `time`, a GHC boot package and already a dependency of servant-client 0.20.3.0. Both ranges intersect Baikai's own Cabal files, which declare `http-client-tls >=0.3 && <0.5` and `time ^>=1.14`. EP-6 owns the final bounds review.
+- *Bounds:* library bounds must stay inside R12's list. A new library dependency must also be justified in that plan's Decision Log. EP-4 is expected to add `http-client-tls >=0.3 && <0.5`, and `http-client ^>=0.7` only if it is named directly. It also adds `servant-client-core >=0.20.3 && <0.22`, matching servant-client 0.20.3.0's own bound, because `Servant.Client.Generic` (`genericClientHoist`) is not re-exported by servant-client. EP-3 is expected to add `time`, a GHC boot package and already a dependency of servant-client 0.20.3.0. Both ranges intersect Baikai's own Cabal files, which declare `http-client-tls >=0.3 && <0.5` and `time ^>=1.14`. EP-6 owns the final bounds review.
 
 **`src/TypeSafe/Wire.hs`, the umbrella module.**
 - *Plans:* EP-1, EP-2, EP-3.
@@ -132,7 +138,7 @@ EP-1 ──┬──> EP-2 ──┬──> EP-4 ──────────�
 - *Plans:* EP-1 defines; EP-2, EP-3, EP-4 and EP-5 consume.
 - *Contents:*
   - `apiSpecVersion :: Text`.
-  - `newtype ModelName = ModelName Text` and `newtype QuestionName = QuestionName Text`, each deriving `IsString`, `Eq`, `Ord`, `Show`, `ToJSON`, `FromJSON`, `ToJSONKey` and `FromJSONKey`.
+  - `newtype ModelName = ModelName Text` and `newtype QuestionName = QuestionName Text`, each with `deriving stock (Generic, Show)` and `deriving newtype (Eq, Ord, IsString, ToJSON, FromJSON, ToJSONKey, FromJSONKey)`.
   - The constants `jevLatest` and `jevPreview`.
   - `data Content = ContentText Text | ContentObject Object | ContentArray Array`, with `ToJSON` (including `toEncoding`), `FromJSON` (which rejects numbers, booleans and null), `contentFromValue :: Value -> Maybe Content` and `contentToValue :: Content -> Value`.
   - The constants `requestIdHeader` (`x-typesafe-request-id`), `dangerZoneImagesHeader` (`TypeSafe-Danger-Zone-Images`), `dangerZoneLongContextHeader` (`TypeSafe-Danger-Zone-Long-Context`), `systemOnePath` (`["v1", "systemone"]`), `modelsPath` (`["v1", "models"]`) and `defaultBaseUrl` (`https://api.typesafe.ai`).
@@ -142,7 +148,10 @@ EP-1 ──┬──> EP-2 ──┬──> EP-4 ──────────�
 - *Both directions:* every wire type has both `ToJSON` (with a hand-written `toEncoding` that agrees with `toJSON`) and `FromJSON`. EP-4's mock server must encode responses, and EP-5 checks decode-after-encode for every schema.
 - *Field names:* a field takes the property's name verbatim. Snake-case names become lower camel case (`input_tokens` becomes `inputTokens`, `release_date` becomes `releaseDate`, `data_base64` becomes `dataBase64`). The reserved word `type` becomes `type_` where it is a real field, on `ValidationError`.
 - *Tags:* the discriminator `type` on questions and answers is implied by the constructor and is never a field. Each variant record (`NoulQuestion`, `ChoiceAnswer`, and so on) still owns its tag in both directions: its own encoder writes `"type"`, and its own decoder requires it, because each variant schema lists `type` as required. The `Question` and `Answer` sums only dispatch. The constant `type` on `Asset` is implied by the type, written on encode and accepted when absent or equal to `"image"` on decode.
-- *Instances and optionality:* every wire type derives `Eq` and `Show`, which EP-4 and EP-5 rely on. A property the document leaves optional is a `Maybe` field. Two non-obvious cases are `HTTPValidationError.detail` and every `Asset` field, including its constant `type`.
+- *Instances and optionality:* every wire type has `deriving stock (Generic, Eq, Show)`. Every deriving clause names its strategy, which is required because `DeriveAnyClass` is on. EP-4 and EP-5 rely on `Eq` and `Show`. `Generic` lets consumers use generic-lens `#label` access without the library depending on lens. A property the document leaves optional is a `Maybe` field. Two non-obvious cases are `HTTPValidationError.detail` and every `Asset` field, including its constant `type`.
+- *Field access:* `NoFieldSelectors` is on, so no top-level selector functions are generated. Fields are read with record dot syntax or generic-lens. Library code constructs records and never uses record update syntax on wire types. Only `TypeSafe.V1` re-enables `FieldSelectors`, because record dot syntax cannot see through `NamedRoutes` fields.
+- *Numbers and collections:* token counts and validation-location indices are `Int`, and a non-integral or out-of-range value fails to decode. `SystemOneRequest.assets` is a plain `Map Text Asset`, omitted when empty.
+- *Imports:* qualified imports use the postpositive form (`import Data.Map.Strict qualified as Map`).
 - *Unknown keys:* unknown additional properties are ignored on decode.
 - *Unknown tags:* a `type` tag outside the known set decodes to `QuestionOther tag object` or `AnswerOther tag object`, and re-encodes the original object unchanged.
 - *Ownership:* EP-5 owns the table mapping each schema property to its Haskell field, which is the single place this convention is checked.
@@ -177,7 +186,7 @@ EP-1 ──┬──> EP-2 ──┬──> EP-4 ──────────�
 - that the wire types mirror the vendored specification, covering the naming convention, both codec directions, lossless numbers, no semantic validation in decoders and surfaced unknown tags;
 - that the first release targets the current published document with JSON bodies only, deferring multipart to the follow-up plan.
 
-Later plans update those records, or add new ones, when they change these decisions.
+EP-1 also records which haskell-jitsurei patterns were adopted and which were declined (`docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`). Later plans update those records, or add new ones, when they change these decisions.
 
 
 ## Progress
@@ -230,6 +239,20 @@ Answer,Asset,BoxAnswer,BoxCoordinates,BoxQuestion,ChoiceAnswer,ChoiceQuestion,HT
 
 - Decision: the package name is `typesafe-hs` and modules live under `TypeSafe.*`: `TypeSafe.Wire` and its submodules, and `TypeSafe.V1`.
   Rationale: this resolves an open decision. The Nix wiring (`nix/haskell.nix`) and `mori.dhall` already use `typesafe-hs`. The community SDK publishes `typesafe-ai` and `typesafe-ai-core`, so there is no clash on Hackage. EP-6 re-verifies that the name is free before uploading.
+  Date: 2026-10-21
+
+- Decision: adopt the haskell-jitsurei conventions that fit a policy-free Hackage client, and record the rest as declined in `docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`, which EP-1 creates.
+  - *Sources:* `mori://shinzui/haskell-jitsurei/docs/core-standards`, `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`, `mori://shinzui/haskell-jitsurei/docs/core-multiline-strings` and `mori://shinzui/haskell-jitsurei/docs/api-servant-routes`.
+  - *Adopted:* the GHC2024 baseline stanza, postpositive qualified imports, explicit deriving strategies with `Generic` on every wire type, strict fields without prefixes, `MultilineStrings` in tests, and a `NamedRoutes` record with the auth header on each route field.
+  - *Adopted from the idiom review the same day:* `NoFieldSelectors`, `Int` token counts and location indices, and a plain `Map` for assets.
+  - *Declined:*
+    - `MultiVerb`, because R1 requires an unmodified `ClientError` and we do not own the server's status set;
+    - a custom prelude, and `lens` or `generic-lens` as library dependencies, because of R1's dependency list;
+    - generic aeson options, because R3 needs exact bytes;
+    - the server-side API patterns, because this library consumes an API rather than serving one.
+  - *Left for a separate decision:* a `newtype` for the API token, `NFData` instances, and exposing `Internal` modules.
+
+  Rationale: the user asked for the identified items to be applied to the plans, and haskell-jitsurei is the fleet's convention catalogue. Each declined pattern conflicts with a numbered requirement in `docs/initial-spec.md`.
   Date: 2026-10-21
 
 - Decision: the test framework is `tasty`, with `tasty-hunit`, `tasty-quickcheck` and `tasty-golden` as needed, all in one test suite.

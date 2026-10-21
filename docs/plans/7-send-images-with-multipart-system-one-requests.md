@@ -9,6 +9,12 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-10-21T17:50:12Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-10-21T18:07:26Z
+      mode: "update"
+      note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
 ---
 
 # Send images with multipart System One requests
@@ -90,9 +96,19 @@ To see it working:
   The official TypeScript SDK, by contrast, draws a random 32-hex-digit boundary per request (local checkout `/Users/shinzui/Keikaku/hub/agents/typesafe-sdk-js`, `src/assets.ts` lines 23-26 and 318-340). The server accepts any boundary, so ours is a free choice.
   Date: 2026-10-21
 
-- Decision: add the servant binding as a separate `MultipartAPI` type and standalone functions in `TypeSafe.V1`. Do not change the existing `API` type or add a field to the exported `Methods` record. Release as 0.1.1.0.
+- Decision: add the servant binding as a separate `NamedRoutes` record, `data MultipartRoutes mode = MultipartRoutes { systemOneMultipart :: mode :- SystemOneMultipartEndpoint }`, with `type MultipartAPI = NamedRoutes MultipartRoutes` and a standalone client function in `TypeSafe.V1`. Do not add a field to the existing `Routes` record, change `API`, or add a field to the exported `Methods` record. Release as 0.1.1.0.
 
-  Rationale: under the Haskell Package Versioning Policy (PVP), changing an exported type or adding a field to a record whose constructor is exported (`Methods (..)`) is a breaking change requiring a major bump to 0.2.0.0. Adding new exports and new modules is a minor change, so 0.1.0.0 becomes 0.1.1.0.
+  Rationale: haskell-jitsurei's servant pattern (`mori://shinzui/haskell-jitsurei/docs/api-servant-routes`) allows a route either as a new field or as a separate record, which is later mounted with `:<|>` if a combined API is ever wanted. Adding a field would be additive in spirit, but it is breaking under the Haskell Package Versioning Policy (PVP). `Routes (..)` and `Methods (..)` are exported with their constructors, so a consumer that builds a `Routes (AsServerT m)` server, as a loopback fixture does, or pattern-matches either record would stop compiling. That forces a major bump to 0.2.0.0. A new record, type and function are new exports only, a minor change, so 0.1.0.0 becomes 0.1.1.0. Folding the multipart route into `Routes` is left to a future major release.
+  Date: 2026-10-21 (revised the same day from a positional `:<|>`-style `MultipartAPI` type to a `NamedRoutes` record)
+
+- Decision: the new code follows the conventions the initiative adopted from haskell-jitsurei, recorded in `docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`:
+  - new records and sums use explicit `deriving stock (Generic, Eq, Show)`, and the exception uses `deriving stock (Show)` with `deriving anyclass (Exception)`;
+  - qualified imports are postpositive;
+  - fields in `TypeSafe.Wire.Multipart` have no selector functions (`NoFieldSelectors`) and are read with record dot syntax;
+  - the multipart route field carries its own `Authorization` header, following jitsurei's "auth goes on the field, not the record";
+  - the client is derived with `genericClientHoist`.
+
+  Rationale: the core package's common stanza already enables `NoFieldSelectors`, `DeriveAnyClass` and the rest of the jitsurei baseline, and new modules must match. `NoFieldSelectors` matters concretely here. Otherwise `ImagePart`'s `contentType` field would generate a selector that clashes with servant's `Accept` class method `contentType`, which `TypeSafe.V1` uses for the `MultipartFormData` instance. `TypeSafe.V1` turns `FieldSelectors` back on only because `NamedRoutes` fields need selector application.
   Date: 2026-10-21
 
 
@@ -133,17 +149,24 @@ To see it working:
 
   `src/TypeSafe/Wire.hs` is the umbrella module that re-exports every wire module.
 - **`src/TypeSafe/Wire/Request.hs`** (EP-2) holds the request types:
-  - `SystemOneRequest { model, state, questions, assets }`, where `assets` is optional and holds a map from placeholder text to `Asset`;
+  - `SystemOneRequest { model, state, questions, assets }`, where `assets :: Map Text Asset` maps placeholder text to `Asset`. It is omitted from the JSON when empty, and an absent key decodes to `Map.empty`;
   - the `Question` sum type, including `QuestionBox`;
   - `Asset { dataBase64 :: Maybe Text, format :: Maybe …, part :: Maybe Text }`, with `type` implied;
   - `encodeSystemOneRequest :: SystemOneRequest -> Data.ByteString.Lazy.ByteString`, built on `toEncoding` with a fixed key order;
   - `duplicateQuestionNames` and `duplicateChoiceLabels`.
 
   Its golden files are `test/golden/baikai-request.json` and `test/golden/baikai-request.bytes`.
+- **Project conventions** (EP-1, `docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`). The common stanza in `typesafe-hs.cabal` enables `GHC2024` with `DeriveAnyClass`, `DuplicateRecordFields`, `NoFieldSelectors`, `OverloadedLabels`, `OverloadedRecordDot` and `OverloadedStrings`; this is the haskell-jitsurei baseline (`mori://shinzui/haskell-jitsurei/docs/core-standards`) plus the last two.
+  - Wire-type fields have no selector functions. They are read with record dot syntax (`req.assets`) and constructed with record syntax.
+  - Every exported wire type derives `Generic`, `Eq` and `Show` through explicit `deriving stock` clauses.
+  - Qualified imports are postpositive (`import Data.Map.Strict qualified as Map`).
+  - `-Werror=missing-fields` is set only in `cabal.project`.
 - **EP-3** owns `src/TypeSafe/Wire/Response.hs`, `src/TypeSafe/Wire/Models.hs` and `src/TypeSafe/Wire/Error.hs`. They provide `SystemOneResponse` with `AnswerBox` and `BoxAnswer`, and `parseErrorBody`.
-- **`src/TypeSafe/V1.hs`** (EP-4) holds the servant layer:
-  - the `API` type, with a required strict `Authorization` header, then `"v1"`, then the `systemone` and `models` endpoints;
-  - optional danger-zone headers on `systemone`;
+- **`src/TypeSafe/V1.hs`** (EP-4) holds the servant layer. It enables `{-# LANGUAGE FieldSelectors #-}` for itself, because record dot syntax cannot see through `NamedRoutes` fields. It provides:
+  - the routes as a `NamedRoutes` record rather than a positional `:<|>` chain: `data Routes mode = Routes { systemOne :: mode :- SystemOneEndpoint, models :: mode :- ModelsEndpoint }` and `type API = NamedRoutes Routes`;
+  - on each endpoint synonym, its own required strict `Authorization` header, then `"v1"` and the path;
+  - optional danger-zone headers on `SystemOneEndpoint`;
+  - a client derived with `genericClientHoist`;
   - the `Methods` record (`createSystemOne`, `listModels`, plus whatever variant EP-4 chose for the danger-zone flags);
   - `getClientEnv :: Text -> IO ClientEnv` and `makeMethods :: ClientEnv -> Text -> Methods`.
 
@@ -192,7 +215,10 @@ data ImagePart = ImagePart
     contentType :: !Text,             -- e.g. "image/png"; see imageContentType
     bytes :: !Data.ByteString.Lazy.ByteString
   }
+  deriving stock (Generic, Eq, Show)
 ```
+
+Under `NoFieldSelectors` these fields generate no top-level functions. In particular there is no `contentType` selector to clash with servant's `Accept` method in `TypeSafe.V1`.
 
 **The multipart request.**
 
@@ -201,6 +227,7 @@ data MultipartRequest = MultipartRequest
   { request :: !SystemOneRequest,
     images :: !(Vector ImagePart)     -- sent in this order, after the request part
   }
+  deriving stock (Generic, Eq, Show)
 ```
 
 **The problems a request can have.**
@@ -214,6 +241,7 @@ data MultipartProblem
   | ImagePartUsedMoreThanOnce Text    -- several assets name it
   | AssetPartMissing Text Text        -- placeholder, part name with no image
   | BoundaryOccursInPart Text         -- part name ("request" or an image)
+  deriving stock (Generic, Eq, Show)
 ```
 
 **The functions.**
@@ -257,17 +285,26 @@ instance MimeUnrender MultipartFormData EncodedMultipart where ...  -- raw bytes
 
 The operators `//` and `/:` come from `Network.HTTP.Media`. If `servant` does not re-export them, add `http-media` to the library's `build-depends`. `servant` already depends on it, so the dependency closure is unchanged. Record it in the Decision Log, because R1 lists direct dependencies.
 
-**The API type.** Define a separate API type so that the existing `API` type keeps its meaning:
+**The routes.** Define a separate `NamedRoutes` record so that the existing `Routes` record and `API` type keep their meaning (see the Decision Log for why this is not a new field on `Routes`):
 
 ```haskell
-type MultipartAPI =
+type SystemOneMultipartEndpoint =
   Header' '[Required, Strict] "Authorization" Text
+    :> "v1" :> "systemone"
     :> Header' '[Required, Strict] "TypeSafe-Danger-Zone-Images" Text
     :> Header' '[Optional, Strict] "TypeSafe-Danger-Zone-Long-Context" Text
-    :> "v1" :> "systemone"
     :> ReqBody '[MultipartFormData] EncodedMultipart
     :> Post '[JSON] SystemOneResponse
+
+data MultipartRoutes mode = MultipartRoutes
+  { systemOneMultipart :: mode :- SystemOneMultipartEndpoint
+  }
+  deriving stock (Generic)
+
+type MultipartAPI = NamedRoutes MultipartRoutes
 ```
+
+Mirror `SystemOneEndpoint`'s header order exactly, so the two endpoints differ only in the images header being required and in the request content type. Re-read `TypeSafe.V1` first; if EP-4's order differs from the one shown here, follow EP-4. Derive the client the way `makeMethods` does, with `Servant.Client.Generic.genericClientHoist`, and read the field with selector application (`systemOneMultipart client`), because `TypeSafe.V1` has `FieldSelectors` on.
 
 The long-context header should be modelled the way EP-4 modelled it for the JSON endpoint, so re-read `TypeSafe.V1` first. Images are always present in a multipart request, so the images header is always sent as `"true"`.
 
@@ -281,7 +318,7 @@ Its second argument is the API token, sent as `Bearer <token>` exactly as `makeM
 
 If EP-4 exposed the danger-zone flags as a record argument, accept the same record here and ignore its images flag. Otherwise, take `Bool` for long context. Pick whichever matches the existing style, and log the choice.
 
-**Tests.** Extend `test/TypeSafe/Test/MockServer.hs`, or add a sibling, to serve `MultipartAPI` with a handler that records the raw body and headers and replies with the decoded `test/golden/baikai-response.json`. Then add a test to `test/TypeSafe/V1Spec.hs`, or whatever module EP-4 used, that calls `createSystemOneMultipart` against the loopback server. It asserts that:
+**Tests.** Extend `test/TypeSafe/Test/MockServer.hs`, or add a sibling, to serve `MultipartAPI` as a `MultipartRoutes (AsServerT Handler)` record, with a handler that records the raw body and headers and replies with the decoded `test/golden/baikai-response.json`. Then add a test to `test/TypeSafe/V1Spec.hs`, or whatever module EP-4 used, that calls `createSystemOneMultipart` against the loopback server. It asserts that:
 
 - the captured body is byte-equal to `encodeMultipart` of the same value;
 - the captured `Content-Type` is `multipart/form-data; boundary=<defaultBoundary>`;
@@ -416,7 +453,8 @@ The client receives the golden response. Run this check as soon as Milestone 2's
 
 - `Asset` with a `part` field;
 - `encodeSystemOneRequest`;
-- `TypeSafe.V1` with its `API`, `Methods`, `getClientEnv` and `makeMethods`;
+- `TypeSafe.V1` with its `Routes` record, `API = NamedRoutes Routes`, `SystemOneEndpoint`, `Methods`, `getClientEnv` and `makeMethods`;
+- the jitsurei-aligned conventions in `docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`;
 - the loopback mock server;
 - the conformance suite's content-type exclusion list;
 - ADR 0004;
@@ -440,8 +478,12 @@ imageContentType :: Data.ByteString.Lazy.ByteString -> Text
 ```haskell
 data MultipartFormData                         -- servant content type
 newtype EncodedMultipart = EncodedMultipart Data.ByteString.Lazy.ByteString
-type MultipartAPI = ...                        -- shown in Milestone 2
-newtype MultipartEncodingError = MultipartEncodingError MultipartProblem  -- instance Exception
+type SystemOneMultipartEndpoint = ...          -- shown in Milestone 2
+data MultipartRoutes mode = MultipartRoutes { systemOneMultipart :: mode :- SystemOneMultipartEndpoint }
+type MultipartAPI = NamedRoutes MultipartRoutes
+newtype MultipartEncodingError = MultipartEncodingError MultipartProblem
+  deriving stock (Show)
+  deriving anyclass (Exception)
 createSystemOneMultipart :: ClientEnv -> Text -> MultipartRequest -> IO SystemOneResponse
 ```
 
@@ -449,4 +491,9 @@ createSystemOneMultipart :: ClientEnv -> Text -> MultipartRequest -> IO SystemOn
 
 Under the alternative design, a `typesafe-hs:multipart` sublibrary would add `servant-multipart-api` and `servant-multipart-client`. Mori's registry has no local source for them as of 2026-10-21, so read them from Hackage and check the latest versions on Hackage before choosing bounds.
 
-**Versioning.** Under the PVP the release is 0.1.1.0: new modules and exports only, with `API` and `Methods` unchanged.
+**Versioning.** Under the PVP the release is 0.1.1.0: new modules and exports only, with `Routes`, `API` and `Methods` unchanged. Adding a field to `Routes` or `Methods` would instead be a major change, to 0.2.0.0.
+
+Revision note (2026-10-21): aligned with the initiative's haskell-jitsurei change set.
+- The summary of prior deliverables now reflects EP-4's `NamedRoutes` `Routes` record, which replaces the positional `:<|>` chain, and `assets :: Map Text Asset`, omitted when empty.
+- It also reflects `NoFieldSelectors`, explicit deriving strategies and postpositive imports.
+- The multipart binding is now a separate `MultipartRoutes` record served as `NamedRoutes`, rather than a new `Routes` field, which keeps the release a minor 0.1.1.0 bump.

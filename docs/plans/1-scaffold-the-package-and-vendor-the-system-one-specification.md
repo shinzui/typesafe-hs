@@ -11,6 +11,12 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-10-21T17:50:12Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-10-21T18:07:26Z
+      mode: "update"
+      note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
 ---
 
 # Scaffold the package and vendor the System One specification
@@ -37,8 +43,8 @@ You can see it working when `cabal test` prints its tests passing. They prove th
 ## Progress
 
 - [ ] Milestone 1: `spec/openapi.json` is vendored, normalised and tracked, and `scripts/check-spec-drift.sh` reports the vendored copy current (exit 0).
-- [ ] Milestone 2: the `typesafe-hs` package builds. `TypeSafe.Wire.Common` and the umbrella `TypeSafe.Wire` export the shared primitives, and `cabal test` and `nix build` both pass the `Content` codec tests and the `apiSpecVersion` test.
-- [ ] Milestone 3: `docs/adr/` holds records 0001 to 0004 and an index, and formatting (`nix fmt`) and `nix flake check` are clean.
+- [ ] Milestone 2: the `typesafe-hs` package builds with the haskell-jitsurei baseline common stanza plus `NoFieldSelectors` and `OverloadedRecordDot`. `TypeSafe.Wire.Common` and the umbrella `TypeSafe.Wire` export the shared primitives, each deriving `Generic` with explicit strategies, and `cabal test` and `nix build` both pass the `Content` codec tests and the `apiSpecVersion` test.
+- [ ] Milestone 3: `docs/adr/` holds records 0001 to 0005 and an index, and formatting (`nix fmt`) and `nix flake check` are clean.
 
 
 ## Surprises & Discoveries
@@ -54,6 +60,21 @@ You can see it working when `cabal test` prints its tests passing. They prove th
 
 - Decision: `scripts/check-spec-drift.sh` only reports by default. It rewrites `spec/openapi.json` only when given the explicit `--write` flag.
   Rationale: the MasterPlan forbids silently re-vendoring the document. Any change to it must be a deliberate, reviewed commit, because it can invalidate the conformance suite owned by EP-5.
+  Date: 2026-10-21
+
+- Decision: the package follows the haskell-jitsurei core standards (`mori://shinzui/haskell-jitsurei/docs/core-standards`) and record patterns (`mori://shinzui/haskell-jitsurei/docs/core-record-patterns`), with recorded exceptions:
+  - **Common stanza.** It is the jitsurei baseline (`GHC2024`; `DeriveAnyClass`, `DuplicateRecordFields`, `OverloadedLabels`, `OverloadedStrings`) plus `NoFieldSelectors` and `OverloadedRecordDot`, with `ghc-options: -Wall`.
+  - **Imports and deriving.** Qualified imports are postpositive. Every deriving clause names its strategy, and every exported type derives `Generic`.
+  - **Test-only extension.** `MultilineStrings` is enabled only in the test suite.
+  - **Local warnings.** `-Werror=missing-fields`, together with the stricter warning flags, lives in `cabal.project` rather than in the `.cabal` file.
+  - **ADR 0005.** It records which jitsurei patterns are adopted and which are declined.
+
+  Rationale:
+  - **Consistency.** These are the fleet's minimum conventions, and Baikai's consumers follow them.
+  - **`NoFieldSelectors`.** It keeps the umbrella module from exporting top-level functions such as `state`, `model`, `left` or `right` that clash with mtl, `Control.Arrow` and users' own names. Fields stay readable with record dot syntax, and with generic-lens `#label` through `Generic`.
+  - **Warnings in `cabal.project`.** `-Werror` flags in a published `.cabal` file make `cabal check` complain, and break Hackage users on newer compilers. Putting them in `cabal.project` keeps them fatal for local development only.
+  - **Declined patterns.** The library cannot take `lens` or `generic-lens` as dependencies, because of R1's dependency list, and its JSON encoders must stay hand-written for R3. ADR 0005 records these declined patterns so they are not re-proposed.
+
   Date: 2026-10-21
 
 
@@ -108,6 +129,32 @@ Both come from the sibling Baikai project, `mori://shinzui/baikai`, the first co
 
 Mori's concept registry had no artifact-level handle for either record on 2026-10-21, so cite them by the project URI plus the project-relative path and say the artifact-level URI is pending. Together they are why this library must contain no retry, classification, timeout or environment policy. ADR 0002 below records that.
 
+### The haskell-jitsurei conventions this package follows
+
+`mori://shinzui/haskell-jitsurei` (local checkout `/Users/shinzui/Keikaku/bokuno/haskell-jitsurei`) is the catalogue of Haskell conventions shared across this owner's projects. Three of its documents apply here:
+
+- **Core standards, `mori://shinzui/haskell-jitsurei/docs/core-standards` (`patterns/core/standards.md`).**
+  - Every package uses `GHC2024` and a `common` stanza with at least `DeriveAnyClass`, `DuplicateRecordFields`, `OverloadedLabels` and `OverloadedStrings`. Projects may add to this baseline but not relax it.
+  - Qualified imports are postpositive (`import Data.Vector qualified as Vector`), never `import qualified Data.Vector as Vector`.
+- **Record patterns, `mori://shinzui/haskell-jitsurei/docs/core-record-patterns` (`patterns/core/record-patterns.md`).**
+  - Fields carry no prefixes and are strict.
+  - Every deriving clause names its strategy (`deriving stock`, `deriving newtype`, `deriving anyclass`), because `DeriveAnyClass` is on, and a clause without a strategy can silently derive an empty instance.
+  - Records derive `Generic`, so that code can read and update them with generic-lens `#label` syntax.
+- **Multiline strings, `mori://shinzui/haskell-jitsurei/docs/core-multiline-strings` (`patterns/core/multiline-strings.md`).** `MultilineStrings` (GHC 9.12 and later) gives indentation-stripped `"""…"""` literals. Here it is enabled only in the test suite, for inline JSON.
+
+This project adds two extensions to the baseline:
+
+- **`OverloadedRecordDot`,** which R2 requires: consumers read fields as `answer.confidence`.
+- **`NoFieldSelectors`.** It stops GHC from generating a top-level selector function for each record field. Without it, the wire modules would export functions named `state`, `model`, `name`, `left`, `right` and so on, which clash with mtl, `Control.Arrow` and users' own code. With it, fields are still usable in record construction, in pattern matching and through `HasField`. That means record dot syntax works, and so does generic-lens `#label` through `Generic`. The library itself does not depend on `lens` or `generic-lens`.
+
+The types this plan defines (`Content` and the two newtypes) have no record fields, so `NoFieldSelectors` changes nothing in them; it is set here so that EP-2 and EP-3 inherit it. The jitsurei patterns this library deliberately does not adopt are recorded in ADR 0005 (Milestone 3):
+
+- `MultiVerb` error statuses;
+- a custom prelude;
+- `lens` and `generic-lens` as library dependencies;
+- shared generic aeson options;
+- the server-side API patterns.
+
 ### The OpenAPI document and its drift
 
 TypeSafe publishes its OpenAPI document at `https://api.typesafe.ai/openapi.json`. On 2026-10-21 that document had:
@@ -158,10 +205,42 @@ This milestone creates five files. The exact exports are under Interfaces and De
 
 1. **`typesafe-hs.cabal`, at the repository root.** It contains:
    - **Package header:** `cabal-version: 3.12`, `name: typesafe-hs`, `version: 0.1.0.0`, a one-line `synopsis`, `category: AI, Web`, `build-type: Simple`, `tested-with: GHC ==9.12.4` and `extra-source-files: spec/openapi.json`. The last one ensures that a source distribution carries the document the tests read; EP-6 relies on that. Leave `license`, `author`, `maintainer` and the long `description` to EP-6, which owns release metadata and must ask the user which license to use.
-   - **`common common`:** `default-language: GHC2024`, `default-extensions: DuplicateRecordFields, OverloadedRecordDot, OverloadedStrings`, and `ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-deriving-strategies -Wredundant-constraints`. Cabal recognises `GHC2024` only with `cabal-version: 3.12` or later. If `cabal check` or cabal2nix rejects it, fall back to `default-language: GHC2021` plus `default-extensions: DataKinds, DerivingStrategies, LambdaCase` alongside the three above, and record the fallback in the Decision Log.
-   - **`library`:** `import: common`, `hs-source-dirs: src`, and `exposed-modules: TypeSafe.Wire, TypeSafe.Wire.Common`. Its dependencies are `aeson ^>=2.2`, `base >=4.20 && <5`, `http-types ^>=0.12` and `text ^>=2.1`. Every bound here is copied from R12 so that it intersects Baikai's. Later plans add `bytestring`, `containers`, `scientific`, `vector`, `servant` and `servant-client` when they first need them.
-   - **`test-suite typesafe-hs-test`:** `import: common`, `type: exitcode-stdio-1.0`, `hs-source-dirs: test`, `main-is: Main.hs`, `other-modules: TypeSafe.SpecVersionTest, TypeSafe.Wire.CommonTest`, and `ghc-options: -threaded -rtsopts -with-rtsopts=-N`. Its dependencies are `typesafe-hs`, `aeson`, `base`, `bytestring ^>=0.12`, `text`, `vector ^>=0.13`, `tasty >=1.4 && <1.6` and `tasty-hunit ^>=0.10`. Test-only packages may use bounds outside R12's list, because Baikai never builds this test suite.
-2. **`cabal.project`:** `packages: .` and `tests: True`.
+   - **`common common`:** exactly the following. It is the haskell-jitsurei baseline plus `NoFieldSelectors` and `OverloadedRecordDot` (see Context and Orientation):
+
+     ```cabal
+     common common
+       default-language: GHC2024
+       default-extensions:
+         DeriveAnyClass
+         DuplicateRecordFields
+         NoFieldSelectors
+         OverloadedLabels
+         OverloadedRecordDot
+         OverloadedStrings
+       ghc-options: -Wall
+     ```
+
+     Cabal recognises `GHC2024` only with `cabal-version: 3.12` or later. If `cabal check` or cabal2nix rejects it, fall back to `default-language: GHC2021` plus `DataKinds`, `DerivingStrategies`, `ImportQualifiedPost` and `LambdaCase` alongside the six extensions above, and record the fallback in the Decision Log.
+   - **`library`:** `import: common`, `hs-source-dirs: src`, and `exposed-modules: TypeSafe.Wire, TypeSafe.Wire.Common`. Its dependencies are `aeson ^>=2.2`, `base >=4.20 && <5`, `http-types ^>=0.12` and `text ^>=2.1`. Every bound here is copied from R12 so that it intersects Baikai's. Later plans add `bytestring`, `containers`, `scientific`, `vector`, `servant` and `servant-client` when they first need them. `GHC.Generics` comes from `base`, so deriving `Generic` adds no dependency.
+   - **`test-suite typesafe-hs-test`:**
+     - `import: common`, plus `default-extensions: MultilineStrings` in the stanza itself, so tests can embed JSON fixtures as `"""…"""` literals.
+     - `type: exitcode-stdio-1.0`, `hs-source-dirs: test`, `main-is: Main.hs`.
+     - `other-modules: TypeSafe.SpecVersionTest, TypeSafe.Wire.CommonTest`.
+     - `ghc-options: -threaded -rtsopts -with-rtsopts=-N`.
+     - Dependencies: `typesafe-hs`, `aeson`, `base`, `bytestring ^>=0.12`, `text`, `vector ^>=0.13`, `tasty >=1.4 && <1.6` and `tasty-hunit ^>=0.10`.
+
+     Test-only packages may use bounds outside R12's list, because Baikai never builds this test suite.
+2. **`cabal.project`:** `packages: .`, `tests: True`, and a package stanza that makes missing record fields fatal and turns on the stricter warnings for local development only:
+
+   ```cabal
+   packages: .
+   tests: True
+
+   package typesafe-hs
+     ghc-options: -Werror=missing-fields -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-deriving-strategies -Wredundant-constraints
+   ```
+
+   These flags do not go in `typesafe-hs.cabal`. A `-Werror` flag in a published `.cabal` file makes `cabal check` complain, and turns a new warning in a future GHC into a build failure for Hackage users. `-Wmissing-deriving-strategies` enforces the jitsurei rule that every deriving clause names its strategy. `nix build` reads only the `.cabal` file, so under Nix these flags are simply absent.
 3. **`src/TypeSafe/Wire/Common.hs`:** the primitives. `Content`'s instances are written by hand:
    - `toJSON` maps each constructor to the corresponding `Value`.
    - `toEncoding` uses `toEncoding` on the underlying `Text`, `Object` or `Array`.
@@ -169,6 +248,11 @@ This milestone creates five files. The exact exports are under Interfaces and De
    - `contentFromValue` is the total, `Maybe`-returning version of `parseJSON`; `contentToValue` is `toJSON`.
 
    Each export gets a single-line Haddock comment that cites its R-number.
+
+   Follow the jitsurei conventions in this and every other module:
+   - Write qualified imports postpositively, for example `import Data.Text qualified as Text` and `import Data.Aeson.KeyMap qualified as KeyMap`.
+   - Name every deriving strategy: `Content` uses `deriving stock (Generic, Eq, Show)`. Each newtype uses `deriving stock (Generic, Show)` and `deriving newtype (Eq, Ord, IsString, ToJSON, FromJSON, ToJSONKey, FromJSONKey)`.
+   - Never derive JSON instances with `anyclass` or generic aeson. `Content`'s instances are hand-written so that EP-2 controls the exact bytes (R3).
 4. **`src/TypeSafe/Wire.hs`:** the umbrella module. It re-exports the whole of `TypeSafe.Wire.Common` with `module TypeSafe.Wire.Common`. Add a module Haddock comment saying that consumers import only `TypeSafe.Wire`, and that EP-2 and EP-3 will add re-exports of `TypeSafe.Wire.Request`, `TypeSafe.Wire.Response`, `TypeSafe.Wire.Models` and `TypeSafe.Wire.Error`.
 5. **The test files:**
    - **`test/Main.hs`** builds the tasty tree, `defaultMain (testGroup "typesafe-hs" [TypeSafe.SpecVersionTest.tests, TypeSafe.Wire.CommonTest.tests])`. Each later plan adds exactly one entry to this list.
@@ -185,20 +269,24 @@ This milestone creates five files. The exact exports are under Interfaces and De
      - `"x" :: QuestionName` type-checks, showing `IsString` works;
      - every constant has the value listed below.
 
-The package must build with zero warnings under the flags above. Run `nix fmt` before committing. `nix build` builds from the flake's own source, which contains only files tracked by git, so `git add` every new file before running it.
+     Write multi-line JSON inputs as `MultilineStrings` literals rather than `unlines` lists or escaped one-liners.
+
+The package must build with zero warnings under the common stanza and the `cabal.project` flags above. Run `nix fmt` before committing. `nix build` builds from the flake's own source, which contains only files tracked by git, so `git add` every new file before running it.
 
 ### Milestone 3: the ADR corpus and repository checks
 
 Create `docs/adr/` following the plain filesystem convention used by Baikai (`mori://shinzui/baikai`, project-relative path `docs/adr/0001-architecture-decision-record-convention.md`, artifact-level URI pending). In that convention, each record is one Markdown file named `NNNN-kebab-case-slug.md`, numbered from `0001` and never renumbered. Its YAML frontmatter has exactly `title`, `status` (`accepted`, `superseded` or `rejected`) and `date`. Its body has the sections Context, Decision and Consequences. Records are never deleted; a superseded record keeps its file, changes its status and names its replacement.
 
-Write five files:
+Write six files:
 
 - **`docs/adr/0001-architecture-decision-record-convention.md`.** Records the convention just described. Context: `mori.dhall` declares no OKF bundle, so there is no profile to validate against. Consequences: adopting the shared OKF ADR profile later is separate, deliberate work.
 - **`docs/adr/0002-the-library-carries-no-transport-policy.md`.** The library contains no retry loop, no mapping of statuses or exceptions to categories or retryability, no timeout policy beyond the caller's `Manager`, no reading of credentials or base URLs from the environment, and no logging hook. A `getClientEnv :: Text -> IO ClientEnv` convenience is allowed. Failures from `makeMethods` are servant-client's `ClientError`, unmodified. Cite R1 and the two Baikai records above. Name the community SDK's client layer (`mori://byteally/typesafe-sdk`) as the rejected alternative that bundled retries, timeouts, credential lookup and classification.
 - **`docs/adr/0003-wire-types-mirror-the-vendored-specification.md`.** Covers:
   - one Haskell type per schema in `spec/openapi.json`;
   - field names taken verbatim from properties, with snake case turned into lower camel case (`input_tokens` becomes `inputTokens`) and `type` becoming `type_`;
-  - `DuplicateRecordFields` with `OverloadedRecordDot`, not prefixes;
+  - `DuplicateRecordFields` with `OverloadedRecordDot`, not prefixes. `NoFieldSelectors` means fields are read with record dot syntax or generic-lens `#label`, so the wire modules export no top-level selector functions;
+  - `deriving stock (Generic, Eq, Show)` on every wire type, with explicit strategies, so consumers can use generic-lens without the library depending on it;
+  - integral counts (`Usage` token counts, `ValidationError` location indices) as `Int`, decoded from a `Scientific` that must be integral and fit an `Int`, never through aeson's truncating `Integer` instance;
   - discriminated unions as sum types whose constructors imply the tag, with an explicit `…Other tag object` constructor for unknown tags;
   - `ToJSON` (with a `toEncoding` that agrees with `toJSON`) and `FromJSON` for every wire type;
   - probabilities, confidences and scores as `Scientific`;
@@ -208,6 +296,26 @@ Write five files:
 
   Cite R2, R4, R5 and R7. This record is the durable home of the MasterPlan's codec conventions; EP-2, EP-3 and EP-5 update it if they change them.
 - **`docs/adr/0004-the-first-release-targets-the-published-document-with-json-bodies-only.md`.** Records the drift discovered on 2026-10-21 (same `0.2.0` label, added schemas) and the user's choice to bind every schema of the current published document but only its `application/json` request body. The two `TypeSafe-Danger-Zone-*` headers are bound in the servant API. Images travel inline through `Asset.data_base64`. Multipart is deferred to [docs/plans/7-send-images-with-multipart-system-one-requests.md](../plans/7-send-images-with-multipart-system-one-requests.md) because it needs `servant-multipart-api` and `servant-multipart-client`, outside R1's dependency list. Consequence: EP-5's conformance suite must name the multipart content type as an explicit, tested exclusion rather than silently ignore it.
+- **`docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`.** Records which haskell-jitsurei patterns this library follows, citing `mori://shinzui/haskell-jitsurei/docs/core-standards`, `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`, `mori://shinzui/haskell-jitsurei/docs/core-multiline-strings` and `mori://shinzui/haskell-jitsurei/docs/api-servant-routes`.
+  - **Adopted from the core standards and record patterns:**
+    - the baseline common stanza, plus `NoFieldSelectors` and `OverloadedRecordDot`;
+    - postpositive qualified imports;
+    - explicit deriving strategies;
+    - `Generic` on every wire type;
+    - strict, unprefixed fields;
+    - `MultilineStrings` in tests;
+    - `-Werror=missing-fields` for local development, set in `cabal.project`.
+  - **Adopted from servant-routes, by EP-4:**
+    - `NamedRoutes` instead of a positional `:<|>` chain;
+    - the auth header on each route field;
+    - `FieldSelectors` re-enabled in `TypeSafe.V1`, because record dot syntax cannot see through `NamedRoutes` fields.
+  - **Declined, each with its reason:**
+    - *`MultiVerb` with declared error statuses.* R1 requires failures to surface as servant-client's unmodified `ClientError`, and the server's status set is not ours to declare: 400, 401 and 429 are observed but undocumented.
+    - *A custom `TypeSafe.Prelude`.* It would add public surface to a roughly six-module Hackage package, and its lens re-export exceeds R1's dependency list.
+    - *`lens` and `generic-lens` as library dependencies, and lens-based internal updates.* R1 limits the dependencies, and the library constructs records rather than updating them. Consumers still get `#label` through `Generic`.
+    - *Shared generic aeson options.* R3 needs hand-written `toEncoding` with fixed key orders, plus project-specific rules for absent versus null, variant-owned tags and `Vector`-of-pairs objects.
+    - *The server-side API patterns* (OpenAPI from types, RFC 9457 problem details, health endpoints, request logging, OpenTelemetry, Relay pagination, Hurl). This library consumes a third-party API; the vendored document, not one derived from our types, is the contract.
+  - **Consequence:** a later proposal to adopt a declined pattern must supersede this record.
 - **`docs/adr/README.md`.** A one-paragraph explanation of the convention and a bullet list linking each record with its title.
 
 Links inside ADRs to plans and to `docs/initial-spec.md` are repository-relative. Links to other repositories use `mori://` URIs as above.
@@ -312,7 +420,11 @@ The plan is accepted when all of the following hold, observed on a clean checkou
 2. `cabal build all` succeeds with no warnings, and `cabal test all` passes every case listed in Milestone 2. Changing `apiSpecVersion` makes the version test fail, and so does deleting or corrupting `spec/openapi.json`. Each of these is checked once by hand and then reverted.
 3. In `cabal repl typesafe-hs`, `:t Data.Aeson.decode @TypeSafe.Wire.Content "1"` type-checks and evaluates to `Nothing`, and `TypeSafe.Wire.contentFromValue (Data.Aeson.String "x")` evaluates to `Just (ContentText "x")`. This shows the umbrella module exports the primitives.
 4. `nix build` and `nix flake check` succeed.
-5. `docs/adr/` contains 0001 to 0004 and `README.md`, each record with `title`, `status: accepted` and `date: 2026-10-21` frontmatter and Context, Decision and Consequences sections, and every relative link resolves. Check with `ls` and by opening each linked path.
+5. The jitsurei conventions hold:
+   - `grep -rn 'import qualified' src test` prints nothing, because every qualified import is postpositive;
+   - `cabal build all` under the `cabal.project` flags reports no `-Wmissing-deriving-strategies` warning;
+   - in `cabal repl typesafe-hs`, `:i TypeSafe.Wire.Content` lists a `Generic` instance.
+6. `docs/adr/` contains 0001 to 0005 and `README.md`, each record with `title`, `status: accepted` and `date: 2026-10-21` frontmatter and Context, Decision and Consequences sections, and every relative link resolves. Check with `ls` and by opening each linked path.
 
 
 ## Idempotence and Recovery
@@ -352,6 +464,7 @@ where
 import Data.Aeson (Array, FromJSON, FromJSONKey, Object, ToJSON, ToJSONKey, Value)
 import Data.String (IsString)
 import Data.Text (Text)
+import GHC.Generics (Generic)
 import Network.HTTP.Types (HeaderName)
 
 -- | The OpenAPI @info.version@ of spec/openapi.json (R10).
@@ -360,12 +473,12 @@ apiSpecVersion = "0.2.0"
 
 -- | A model name or alias; any value the API accepts is representable (R8).
 newtype ModelName = ModelName Text
-  deriving stock (Show)
+  deriving stock (Generic, Show)
   deriving newtype (Eq, Ord, IsString, ToJSON, FromJSON, ToJSONKey, FromJSONKey)
 
 -- | A caller-chosen question name, used to key answers (R8).
 newtype QuestionName = QuestionName Text
-  deriving stock (Show)
+  deriving stock (Generic, Show)
   deriving newtype (Eq, Ord, IsString, ToJSON, FromJSON, ToJSONKey, FromJSONKey)
 
 jevLatest, jevPreview :: ModelName
@@ -377,7 +490,7 @@ data Content
   = ContentText !Text
   | ContentObject !Object
   | ContentArray !Array
-  deriving stock (Eq, Show)
+  deriving stock (Generic, Eq, Show)
 
 -- instance ToJSON Content   -- toJSON and toEncoding, hand-written
 -- instance FromJSON Content -- rejects Number, Bool and Null
@@ -395,7 +508,15 @@ defaultBaseUrl :: Text                     -- "https://api.typesafe.ai"
 
 `src/TypeSafe/Wire.hs` is `module TypeSafe.Wire (module TypeSafe.Wire.Common) where import TypeSafe.Wire.Common`.
 
-Library dependencies after this plan are `aeson ^>=2.2`, `base >=4.20 && <5`, `http-types ^>=0.12` and `text ^>=2.1`, all from R12. The test suite also uses `bytestring`, `vector`, `tasty` and `tasty-hunit`.
+Every later module inherits the common stanza: `GHC2024` with `DeriveAnyClass`, `DuplicateRecordFields`, `NoFieldSelectors`, `OverloadedLabels`, `OverloadedRecordDot` and `OverloadedStrings`. Later plans must therefore:
+- read fields with record dot syntax;
+- name every deriving strategy, deriving `Generic` on each wire type;
+- write postpositive qualified imports;
+- construct records rather than using record update syntax on wire types.
+
+`TypeSafe.V1` (EP-4) is the one module that re-enables `FieldSelectors`, with a module pragma, for its `NamedRoutes` record.
+
+Library dependencies after this plan are `aeson ^>=2.2`, `base >=4.20 && <5`, `http-types ^>=0.12` and `text ^>=2.1`, all from R12. The test suite also uses `bytestring`, `vector`, `tasty` and `tasty-hunit`, and enables `MultilineStrings`.
 
 The shared files this plan creates, and how later plans extend them, are listed in the MasterPlan's Integration Points:
 
@@ -403,4 +524,14 @@ The shared files this plan creates, and how later plans extend them, are listed 
 - **`src/TypeSafe/Wire.hs`:** later plans add re-exports.
 - **`test/Main.hs`:** each later plan adds one tasty group.
 - **`spec/openapi.json`:** no other plan edits it; drift is a decision for the MasterPlan.
-- **`docs/adr/`:** later plans update a record when they change its decision, and add new records numbered from `0005`.
+- **`docs/adr/`:** later plans update a record when they change its decision, and add new records numbered from `0006`.
+- **`cabal.project`:** its `package typesafe-hs` stanza holds the development-only warning flags; EP-6 confirms none of them leak into `typesafe-hs.cabal`.
+
+
+Revision note (2026-10-21): aligned the plan with the haskell-jitsurei conventions (`mori://shinzui/haskell-jitsurei/docs/core-standards`, `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`) and the idiom review of the planned API:
+- **Common stanza.** It is now the jitsurei baseline plus `NoFieldSelectors` and `OverloadedRecordDot`, with `MultilineStrings` in the test suite.
+- **Warning flags.** `-Werror=missing-fields` and the stricter warnings moved into `cabal.project`.
+- **Instances and imports.** `Generic`, with explicit deriving strategies, is now on the shared types, and qualified imports are postpositive.
+- **ADRs.** ADR 0003 now covers `Generic`, `NoFieldSelectors` and `Int` counts, and ADR 0005 is added for the adopted and declined jitsurei patterns.
+
+The change avoids exporting selector functions that clash with common names, lets consumers use generic-lens on the wire types, and matches the conventions of the owner's other Haskell projects.

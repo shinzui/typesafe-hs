@@ -11,6 +11,12 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-10-21T17:50:12Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-10-21T18:07:26Z
+      mode: "update"
+      note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
 ---
 
 # Prepare the first Hackage release of typesafe-hs
@@ -61,6 +67,13 @@ You can see it working in three ways:
   Rationale: this keeps the example compiling without adding a test-only build tool. When the two copies diverge, the failure is an ordinary test failure.
   Date: 2026-10-21
 
+- Decision: the release follows the conventions adopted from haskell-jitsurei, recorded in `docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`. The consequences for this plan are:
+  - `-Werror=missing-fields` lives only in `cabal.project`. `typesafe-hs.cabal` carries no `-Werror` of any kind, so `cabal check` stays clean. The isolated consumer build uses its own `cabal.project`, so it never sees the flag and must not depend on it.
+  - The README shows fields read with record dot syntax, because `NoFieldSelectors` means the package exports no selector functions. It also says that generic-lens `#label` access works through the `Generic` instance on every wire type, without this package depending on lens.
+  - The bounds review includes `servant-client-core >=0.20.3 && <0.22` only if plan 4 added it as a direct library dependency.
+  Rationale: a `-Werror` flag in a published Cabal file breaks consumers on newer compilers, and `cabal check` flags it. The README must describe the surface consumers actually get: record dot, `#label`, and no selectors.
+  Date: 2026-10-21
+
 
 ## Outcomes & Retrospective
 
@@ -73,15 +86,22 @@ This repository, `/Users/shinzui/Keikaku/bokuno/typesafe-hs` (registered in Mori
 
 **What exists when this plan starts.** Its hard prerequisites are the whole of [docs/plans/4-bind-the-system-one-api-with-servant-and-servant-client.md](4-bind-the-system-one-api-with-servant-and-servant-client.md) and [docs/plans/5-prove-conformance-with-the-vendored-openapi-document.md](5-prove-conformance-with-the-vendored-openapi-document.md). Both must be marked Complete in the MasterPlan's Exec-Plan Registry. Together with their own prerequisites, plans 1 to 3, they leave the working tree with these parts:
 
-- `typesafe-hs.cabal` and `cabal.project` at the repository root. The Cabal file has a common stanza (language `GHC2024`; extensions `DuplicateRecordFields`, `OverloadedRecordDot` and `OverloadedStrings`; `-Wall`), a `library` with `hs-source-dirs: src`, and one `test-suite typesafe-hs-test` (tasty, `hs-source-dirs: test`, `main-is: Main.hs`).
+- `typesafe-hs.cabal` and `cabal.project` at the repository root.
+  - The Cabal file has a common stanza: language `GHC2024`; extensions `DeriveAnyClass`, `DuplicateRecordFields`, `NoFieldSelectors`, `OverloadedLabels`, `OverloadedRecordDot` and `OverloadedStrings`; `ghc-options: -Wall`. The first four of those extensions are the haskell-jitsurei baseline (`mori://shinzui/haskell-jitsurei/docs/core-standards`).
+  - The `library` uses `hs-source-dirs: src`. There is one `test-suite typesafe-hs-test` (tasty, `hs-source-dirs: test`, `main-is: Main.hs`), which also enables `MultilineStrings`.
+  - `cabal.project` has a `package typesafe-hs` stanza with `ghc-options: -Werror=missing-fields`. That flag is for local development only and is never in the `.cabal` file.
 - `spec/openapi.json`: the vendored OpenAPI document, `info.version` `0.2.0`, normalised with `jq -S .`. Next to it, `scripts/check-spec-drift.sh`, which reports whether the published document at https://api.typesafe.ai/openapi.json still matches the vendored copy.
 - The umbrella module `src/TypeSafe/Wire.hs`, re-exporting these modules:
   - `TypeSafe.Wire.Common`: `apiSpecVersion`, `ModelName`, `QuestionName`, `jevLatest`, `jevPreview`, `Content` with `contentFromValue` and `contentToValue`, and the constants `requestIdHeader`, `dangerZoneImagesHeader`, `dangerZoneLongContextHeader`, `systemOnePath`, `modelsPath` and `defaultBaseUrl`.
-  - `TypeSafe.Wire.Request`: `SystemOneRequest`, `Question` and its variants (noul, choice, score, box and the `QuestionOther` fallback), `NoulCriteria`, `Asset`, `encodeSystemOneRequest`, `duplicateQuestionNames` and `duplicateChoiceLabels`.
-  - `TypeSafe.Wire.Response`: `SystemOneResponse`, `Answer` and its variants (including `AnswerOther`), `BoxCoordinates`, `Usage`, `decodeSystemOneResponse`, and the helpers that convert `Scientific` numbers to `Double`.
+  - `TypeSafe.Wire.Request`: `SystemOneRequest` (whose `assets` field is a plain `Map Text Asset`, omitted from the wire when empty), `Question` and its variants (noul, choice, score, box and the `QuestionOther` fallback), `NoulCriteria`, `Asset`, `encodeSystemOneRequest`, `duplicateQuestionNames` and `duplicateChoiceLabels`.
+  - `TypeSafe.Wire.Response`: `SystemOneResponse`, `Answer` and its variants (including `AnswerOther`), `BoxCoordinates`, `Usage` (token counts are `Int`), `decodeSystemOneResponse`, and the helpers that convert `Scientific` numbers to `Double`.
   - `TypeSafe.Wire.Models`: `ModelMetadataList`, `ModelMetadata`, and a helper that parses the release day.
-  - `TypeSafe.Wire.Error`: `ErrorBody`, `HTTPValidationError`, `ValidationError`, `LocationSegment` and `parseErrorBody`.
-- `src/TypeSafe/V1.hs`: the servant `API` type, the `Methods` record (`createSystemOne`, a variant that sets the danger-zone headers, and `listModels`), `getClientEnv :: Text -> IO ClientEnv` and `makeMethods :: ClientEnv -> Text -> Methods`.
+  - `TypeSafe.Wire.Error`: `ErrorBody`, `HTTPValidationError`, `ValidationError`, `LocationSegment` (whose index holds an `Int`) and `parseErrorBody`.
+- Every exported wire type derives `Generic`, `Eq` and `Show` with explicit `deriving stock` or `deriving newtype` clauses. Because the common stanza enables `NoFieldSelectors`, the package exports no field selector functions. Consumers read fields with record dot syntax (`response.usage.inputTokens`), or with generic-lens `#label` access in their own code.
+- `src/TypeSafe/V1.hs`, which enables `FieldSelectors` for itself. It exports:
+  - the servant routes as a `NamedRoutes` record: `data Routes mode = Routes { systemOne, models }` with `type API = NamedRoutes Routes`, plus the endpoint synonyms `SystemOneEndpoint` and `ModelsEndpoint`;
+  - the `Methods` record (`createSystemOne`, a variant that sets the danger-zone headers, and `listModels`);
+  - `getClientEnv :: Text -> IO ClientEnv` and `makeMethods :: ClientEnv -> Text -> Methods`.
 - Under `test/`:
   - golden files in `test/golden/`, including `baikai-request.json`, `baikai-request.bytes` and `baikai-response.json` with its negative variants;
   - a loopback mock-server test (`test/TypeSafe/Test/MockServer.hs`);
@@ -90,6 +110,7 @@ This repository, `/Users/shinzui/Keikaku/bokuno/typesafe-hs` (registered in Mori
 - `docs/adr/`: the project's Architecture Decision Records, created by plan 1. Before starting, list the filenames. Two kinds of record matter here:
   - The record saying the library carries no transport policy (no retries, classification, timeouts, environment lookups or logging). The README must describe the library accordingly.
   - The record saying the first release targets the current published document with JSON bodies only and defers multipart upload to [docs/plans/7-send-images-with-multipart-system-one-requests.md](7-send-images-with-multipart-system-one-requests.md). The README and CHANGELOG must state that exclusion.
+  - `docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`, which records the haskell-jitsurei conventions this package follows and those it declines. It is what makes the README's field-access guidance and the `cabal.project`-only `-Werror` placement deliberate.
 
   No cross-repository ADR needs to be cited for packaging. Baikai's release-gate behaviour is described here from `docs/initial-spec.md` R12.
 
@@ -126,17 +147,23 @@ If any of these items are missing, the prerequisite plans are not complete. Stop
    - a `source-repository head` stanza with `type: git` and `location: https://github.com/shinzui/typesafe-hs.git`;
    - `tested-with: GHC ==9.12.4`;
    - `extra-doc-files: README.md CHANGELOG.md`, and `extra-source-files` listing `spec/openapi.json`, `test/golden/*.json` and `test/golden/*.bytes`, so that the test suite can run from the source distribution;
-   - no `-Werror` in any `ghc-options`, because `cabal check` rejects it in a published package.
+   - no `-Werror` in any `ghc-options`, because `cabal check` rejects it in a published package. Confirm that `-Werror=missing-fields` appears only in `cabal.project`'s `package typesafe-hs` stanza. That file is not part of the source distribution, and Hackage consumers never read it.
 3. **Write `README.md`.** It covers:
    - what the library is (wire types and codecs mirroring OpenAPI `0.2.0` as vendored, plus a servant client);
    - what it deliberately does not do (no retries, status classification, timeouts beyond the caller's `Manager`, environment lookups or logging; no multipart image upload in 0.1);
    - a short example;
    - how to check for specification drift with `scripts/check-spec-drift.sh`.
 
-   The example builds a one-question noul request with `jevLatest`, prints `encodeSystemOneRequest` of it, and shows the call path: `getClientEnv defaultBaseUrl`, then `makeMethods env apiKey`, then `createSystemOne`. In the example, `apiKey` is read from `TYPESAFE_API_KEY` with `System.Environment.lookupEnv`. That is legitimate in an example and never in the library.
+   The example does four things:
+   - builds a one-question noul request with `jevLatest` and prints `encodeSystemOneRequest` of it;
+   - shows the call path: `getClientEnv defaultBaseUrl`, then `makeMethods env apiKey`, then `createSystemOne`;
+   - reads the answer and the token counts with record dot syntax, for example `response.usage.inputTokens`;
+   - reads `apiKey` from `TYPESAFE_API_KEY` with `System.Environment.lookupEnv`. That is legitimate in an example and never in the library.
+
+   Add a short "Field access" paragraph. It explains that the package enables `NoFieldSelectors`, so it exports no selector functions such as `state`, `model` or `left` that could clash with a consumer's names. Fields are read with record dot syntax. Because every wire type derives `Generic`, consumers who follow haskell-jitsurei's record pattern (`mori://shinzui/haskell-jitsurei/docs/core-record-patterns`) can use generic-lens `#label` access and updates in their own code, without this package depending on lens.
 4. **Make the example a test.** Put the example's code in `test/TypeSafe/ReadmeExample.hs`, between the comment lines `-- README:BEGIN` and `-- README:END`. Add it to the test suite's `other-modules`. Add a tasty group "README example" to `test/Main.hs` with two tests:
    - the README's fenced `haskell` block between the HTML comments `<!-- README:BEGIN -->` and `<!-- README:END -->` is byte-equal to the module's marked region;
-   - the pure part of the example (the encoded bytes) equals an expected literal.
+   - the pure part of the example equals expected literals: the encoded bytes, and a record-dot field read from a decoded inline response.
 
    The module compiling is the proof that the network part type-checks. It is never run, so the suite stays offline.
 5. **Write `CHANGELOG.md`.** It has one entry, `## 0.1.0.0 — <release date>`, listing the surface above, the bound specification version and the multipart exclusion.
@@ -146,10 +173,10 @@ At the end of Milestone 1, `cabal check` is clean, `cabal test` passes (includin
 
 **Milestone 2: prove the candidate as a consumer will use it.**
 
-1. **Run the final bounds review.** Re-run the Hackage version queries and re-read Baikai's bounds (commands below). For every library dependency, confirm that our interval intersects Baikai's and includes the newest Hackage release in the same major version. Record the reviewed table in the Decision Log. If Baikai's bounds changed, follow Baikai.
+1. **Run the final bounds review.** Re-run the Hackage version queries and re-read Baikai's bounds (commands below). Include `servant-client-core` in the review only if `typesafe-hs.cabal`'s library stanza names it directly. Plan 4 adds it only if `TypeSafe.V1` imports from it. For every library dependency, confirm that our interval intersects Baikai's and includes the newest Hackage release in the same major version. Record the reviewed table in the Decision Log. If Baikai's bounds changed, follow Baikai.
 2. **Build the tarball in isolation.** In a scratch directory outside the repository, create a `cabal.project` whose only package is the tarball, with `active-repositories: hackage.haskell.org` so that nothing resolves from this checkout. Add `constraints:` that mirror Baikai's bounds, then build and run the tests there.
 
-   This is the producer/consumer check for the whole initiative. It reproduces Baikai's release gate without touching Baikai.
+   This is the producer/consumer check for the whole initiative. It reproduces Baikai's release gate without touching Baikai. The scratch `cabal.project` deliberately sets no `ghc-options`, so the build proves the package compiles without the repository's local `-Werror=missing-fields`.
 3. **Check the Nix build.** Run `nix build` and `nix flake check` in the repository. `nix build` builds the package from nixpkgs' GHC 9.12.4 package set, and `nix flake check` runs the formatting and pre-commit checks configured in `nix/treefmt.nix` and `nix/pre-commit.nix`. If nixpkgs' `servant-client` falls outside our bounds, record it in Surprises & Discoveries. Fix it through `./flake.module.nix` (the unmanaged extension point; see `flake.module.nix.example`), never by editing `nix/haskell.nix`, which is managed by seihou, the project's template tool.
 
 **Milestone 3: publish, with confirmation at each outward-facing step.** Each sub-step either publishes something or changes shared state, so get the user's explicit "yes" immediately before each one. A "yes" for the candidate does not cover publishing.
@@ -171,12 +198,14 @@ At the end of Milestone 1, `cabal check` is clean, `cabal test` passes (includin
 cabal build all
 cabal test all --test-show-details=direct
 cabal check
+grep -n 'Werror' typesafe-hs.cabal || echo 'no -Werror in typesafe-hs.cabal'
+grep -n 'Werror=missing-fields' cabal.project
 cabal haddock typesafe-hs --haddock-all 2>&1 | grep -E '^\s*[0-9]+% \('
 cabal sdist
 tar -tzf dist-newstyle/sdist/typesafe-hs-0.1.0.0.tar.gz | grep -E 'spec/openapi.json|test/golden/|LICENSE|README.md|CHANGELOG.md'
 ```
 
-Expected: the test run ends with `All N tests passed`, and the README group is listed. `cabal check` prints only its success line:
+Expected: the test run ends with `All N tests passed`, and the README group is listed. The first `grep` prints `no -Werror in typesafe-hs.cabal`, and the second prints the `cabal.project` line. `cabal check` prints only its success line:
 
 ```text
 No errors or warnings could be found in the package.
@@ -194,6 +223,7 @@ The `tar` listing shows `typesafe-hs-0.1.0.0/spec/openapi.json`, every golden fi
 **Milestone 2.** First, the bounds review queries, from any directory:
 
 ```bash
+# add servant-client-core to this list only if typesafe-hs.cabal's library names it
 for p in aeson servant servant-client http-client http-client-tls http-types scientific text vector containers bytestring time; do
   printf '%s: ' "$p"
   curl -fsS -H 'Accept: application/json' "https://hackage.haskell.org/package/$p/preferred" | jq -c '."normal-version"[:2]'
@@ -290,6 +320,8 @@ Intention: intention_01m5frxsb3e9et3b9mn8e31r8c
 Milestone 1 is accepted when all of these hold:
 
 - `cabal check` prints `No errors or warnings could be found in the package.`
+- `typesafe-hs.cabal` contains no `-Werror`; `-Werror=missing-fields` appears only in `cabal.project`.
+- The README documents record-dot field access, `#label` access through `Generic`, and the absence of exported selectors.
 - `cabal test all` passes, including the "README example" group.
 - **The README check catches drift.** Change one character inside the README's marked code block and the README group fails. Revert the change and it passes again.
 - Every Haddock coverage line for an exposed module reads 100%.
@@ -350,7 +382,7 @@ http-client-tls  >=0.3 && <0.5
 time             ^>=1.14
 ```
 
-If plan 4 also depends on `servant-client-core`, bound it `^>=0.20` so that it matches `servant-client`.
+If plan 4 also depends on `servant-client-core` directly, bound it `>=0.20.3 && <0.22`. That is the range `servant-client` 0.20.3.0 itself requires (its Cabal file says `servant-client-core >=0.20.3 && <0.22`), and Hackage's newest `servant-client-core` was 0.21.0.0 on 2026-10-21. Do not add the dependency only to review it.
 
 **Test-suite dependencies** do not constrain consumers, so they only need to resolve on Hackage and with GHC 9.12.4. They are `tasty` and its add-ons, `QuickCheck`, `servant-server`, `warp` and `wai`. Give them caret bounds at their current major versions.
 
@@ -367,3 +399,5 @@ category:    AI, Web
 ```
 
 **Tools:** `cabal` (cabal-install 3.12 or newer, from the dev shell), `curl` and `jq` for the Hackage queries, and Nix for `nix build` and `nix flake check`. Uploading needs a Hackage account with upload rights. The credentials belong to the user and are never written to the repository.
+
+Revision note (2026-10-21): aligned with the haskell-jitsurei change set and the API idiom review. The surface summary now reflects the `NamedRoutes` `Routes` record, `NoFieldSelectors` with record-dot access, `Int` token counts, `assets` as a plain `Map` and `Generic` on every wire type. Milestones 1 and 2 now check that `-Werror=missing-fields` lives only in `cabal.project`, the README documents field access, and `servant-client-core` is bounded `>=0.20.3 && <0.22` only if it is a direct dependency.

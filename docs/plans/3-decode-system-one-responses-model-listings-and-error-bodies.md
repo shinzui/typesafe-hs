@@ -11,6 +11,12 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-10-21T17:50:12Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-10-21T18:07:26Z
+      mode: "update"
+      note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
 ---
 
 # Decode System One responses, model listings and error bodies
@@ -58,7 +64,7 @@ This plan implements requirements R4, R5, R6, R9 and the response half of R11 fr
 
 ## Decision Log
 
-- Decision: Token counts (`Usage.inputTokens`, `Usage.outputTokens`) and validation-location indices are decoded by a hand-written parser that first reads a `Scientific`. The parser fails unless `Data.Scientific.isInteger` holds, then converts with `Data.Scientific.toBoundedInteger` at `Int64` and widens to `Integer`. Out-of-range values fail rather than allocating.
+- Decision (superseded on 2026-10-21 by the `Int` entry below): Token counts (`Usage.inputTokens`, `Usage.outputTokens`) and validation-location indices are decoded by a hand-written parser that first reads a `Scientific`. The parser fails unless `Data.Scientific.isInteger` holds, then converts with `Data.Scientific.toBoundedInteger` at `Int64` and widens to `Integer`. Out-of-range values fail rather than allocating.
   Rationale: R4 says token counts are "rejected when the JSON number is not integral". aeson's own `FromJSON Integer` instance is documented as truncating fractional input (`3.5` would become `3`), so it must not be used. Bounding through `Int64` also avoids the memory blow-up that converting `1e1000000` straight to `Integer` would cause. If the implementer finds that aeson 2.2 rejects fractions on its own, record that under Surprises; the hand-written parser stays either way, because it states the rule explicitly.
   Date: 2026-10-21
 
@@ -86,6 +92,23 @@ This plan implements requirements R4, R5, R6, R9 and the response half of R11 fr
   Rationale: R4's suggested `unitInterval :: Scientific -> Either Text Double` already uses `Text`, and consumers such as Baikai work in `Text`. The conversion is a single `Data.Text.pack` of aeson's message.
   Date: 2026-10-21
 
+- Decision: `Usage.inputTokens`, `Usage.outputTokens` and the index in `LocationIndex` are `Int`, not `Integer`. They are decoded by the internal helper `parseBoundedIntegral :: Value -> Parser Int`, which works in three steps:
+  - it reads a `Scientific`;
+  - it fails unless `Data.Scientific.isInteger` holds;
+  - it converts with `Data.Scientific.toBoundedInteger @Int`, failing when that returns `Nothing`.
+
+  So `3.5` fails, `1e30` fails because it is out of range, and `1.2e3` decodes to `1200`. aeson's truncating `FromJSON Integer` instance is never used. This supersedes the earlier `Int64`-widened-to-`Integer` entry.
+  Rationale: the earlier design bounded through `Int64` and then widened to `Integer`, so the type said "unbounded" while the decoder said "bounded". `Int` states the real range directly, is what consumers compute with, and keeps R4's rule that a non-integral count is rejected. The change set aligning the plans with `mori://shinzui/haskell-jitsurei` and the idiom review (C5) records it.
+  Date: 2026-10-21
+
+- Decision: every type this plan defines follows the haskell-jitsurei core standards (`mori://shinzui/haskell-jitsurei/docs/core-standards`) and record patterns (`mori://shinzui/haskell-jitsurei/docs/core-record-patterns`), as adapted by the masterplan:
+  - **Explicit deriving strategies.** Every record and sum, `ErrorBody` included, has `deriving stock (Generic, Eq, Show)`, and no deriving clause omits its strategy.
+  - **Postpositive imports.** Qualified imports are postpositive (`import Data.Map.Strict qualified as Map`).
+  - **`NoFieldSelectors`.** It is on from the common stanza, so fields are read with record dot syntax (`answer.confidence`) or generic-lens `#confidence`, never with selector functions. Library and test code construct records and pattern-match on them, and never use record update syntax.
+  - **Hand-written JSON instances.** They stay hand-written and are never derived with `anyclass` or generic aeson.
+  Rationale: `Generic` lets consumers that follow jitsurei's record pattern use generic-lens `#label` access without this library depending on `lens` or `generic-lens`, which R1 rules out. Without `NoFieldSelectors`, the fields `left`, `right`, `top`, `name`, `input`, `loc`, `msg`, `model`, `score` and `choice` would become exported top-level functions that clash with `Control.Arrow`, mtl and users' own names. R3 and R5 need exact, hand-controlled codecs, so generic aeson is declared out of scope. EP-1 records the adopted and declined jitsurei patterns in `docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`.
+  Date: 2026-10-21
+
 
 ## Outcomes & Retrospective
 
@@ -98,11 +121,11 @@ This repository, `/Users/shinzui/Keikaku/bokuno/typesafe-hs`, builds one Cabal p
 
 **What EP-1 provides.** This plan starts after EP-1 has delivered:
 
-- **Package files.** `typesafe-hs.cabal` and `cabal.project`. The cabal file has a common stanza enabling `GHC2024`, `DuplicateRecordFields`, `OverloadedRecordDot` and `OverloadedStrings` with `-Wall`, a `library` rooted at `src/`, and one test suite, `typesafe-hs-test`, using `tasty` and rooted at `test/` with `main-is: Main.hs`.
+- **Package files.** `typesafe-hs.cabal` and `cabal.project`. The cabal file has a common stanza with `default-language: GHC2024` that enables `DeriveAnyClass`, `DuplicateRecordFields`, `NoFieldSelectors`, `OverloadedLabels`, `OverloadedRecordDot` and `OverloadedStrings`, with `-Wall`. The package has a `library` rooted at `src/` and one test suite, `typesafe-hs-test`, using `tasty` and rooted at `test/` with `main-is: Main.hs`. The test suite also enables `MultilineStrings`, which is convenient for inline JSON literals.
 - **The vendored document.** The specification is at `spec/openapi.json`, normalised with `jq -S .`. It is TypeSafe's OpenAPI document, and its `info.version` is `0.2.0`.
 - **Shared primitives** in `src/TypeSafe/Wire/Common.hs`:
   - `apiSpecVersion`.
-  - The newtypes `ModelName` and `QuestionName` over `Text`. Each has `IsString`, `Eq`, `Ord`, `Show`, `ToJSON`, `FromJSON`, `ToJSONKey` and `FromJSONKey` instances, so `Map QuestionName a` decodes from a JSON object directly.
+  - The newtypes `ModelName` and `QuestionName` over `Text`. Each has `deriving stock (Generic, Show)` and `deriving newtype (Eq, Ord, IsString, ToJSON, FromJSON, ToJSONKey, FromJSONKey)`, so `Map QuestionName a` decodes from a JSON object directly.
   - `Content`, the JSON union a description can take: `ContentText Text | ContentObject Object | ContentArray Array`. Its `FromJSON` rejects numbers, booleans and `null`. Alongside it are `contentFromValue` and `contentToValue`.
   - The constants `requestIdHeader`, `systemOnePath`, `modelsPath`, `defaultBaseUrl`, `jevLatest` and `jevPreview`.
 - **The umbrella module** `src/TypeSafe/Wire.hs`, which re-exports `TypeSafe.Wire.Common`. You will add the three new modules' re-exports to it.
@@ -172,12 +195,17 @@ R6 requires codecs only for the `detail` forms. The `error` and `message` forms 
 - The reserved word `type` becomes `type_` where it is a real field (`ValidationError`).
 - The discriminator `type` on answers is implied by the constructor and is not a field.
 
-Because several records share field names (`confidence` appears on three answers, `probabilities` on two), the package enables `DuplicateRecordFields`. Read fields with `OverloadedRecordDot` (`answer.confidence`), and build values with record construction syntax. Avoid record-update syntax on these types, which is ambiguous under `DuplicateRecordFields`.
+Because several records share field names (`confidence` appears on three answers, `probabilities` on two), the package enables `DuplicateRecordFields`. It also enables `NoFieldSelectors`, so a field such as `left`, `top`, `name`, `input`, `loc` or `msg` does not become a top-level function. Nothing this library exports can then clash with `Control.Arrow.left`, mtl's `state` or a consumer's own names.
+
+Read fields with `OverloadedRecordDot` (`answer.confidence`, `err.type_`) in both library and test code. Consumers may also use generic-lens `#confidence`, which works because every type derives `Generic`. Build values with record construction syntax and take them apart by pattern matching, including field puns. Never use record-update syntax on these types: it is ambiguous under `DuplicateRecordFields`, and jitsurei's record pattern rules it out.
+
+Qualified imports are postpositive, for example `import Data.Aeson.KeyMap qualified as KeyMap`.
 
 **ADRs.** At the time this plan was written, `docs/adr/` did not exist; EP-1 creates it. Two of the records EP-1 writes govern this plan:
 
 - **Wire types mirror the vendored specification.** This one covers naming, both codec directions, lossless numbers, no semantic validation in decoders, and surfaced unknown tags.
 - **The library carries no transport policy.** No retries, no status classification and no environment lookups.
+- **haskell-jitsurei patterns adopted and declined** (`docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`). Adopted: explicit deriving strategies with `Generic`, `NoFieldSelectors`, postpositive imports. Declined: generic aeson options, and `lens` or `generic-lens` as library dependencies.
 
 List `docs/adr/` and cite both by their repository-relative paths when you implement. The second record cites Baikai's decision that its core, not a provider dependency, classifies transport failures. That decision is `mori://shinzui/baikai`, project-relative path `docs/adr/0011-core-owns-transport-failure-classification.md` (artifact-level URI pending; Mori's concept registry returned no handle on 2026-10-21). It is why `parseErrorBody` must never look at a status code.
 
@@ -186,7 +214,7 @@ List `docs/adr/` and cite both by their repository-relative paths when you imple
 
 The work adds three library modules and their tests, in three milestones that can each be verified alone. All new library modules go under `src/TypeSafe/Wire/`, and each is added to `exposed-modules` in `typesafe-hs.cabal` and re-exported from `src/TypeSafe/Wire.hs`. All new test modules go under `test/TypeSafe/Wire/` and are added to the test suite's `other-modules`. Register one tasty group, `Wire.Response`, in `test/Main.hs`, holding the three milestones' subgroups, as the masterplan asks one group per plan. Golden files go under `test/golden/`, which this plan owns for its response files, and are listed in the cabal file's `extra-source-files` so that the source distribution carries them. The tests read them by paths relative to the package root, which is the working directory `cabal test` uses.
 
-Each type derives `Eq` and `Show` and gets hand-written `FromJSON` and `ToJSON` instances:
+Each type has the explicit clause `deriving stock (Generic, Eq, Show)`; never write a deriving clause without a strategy, because `DeriveAnyClass` is on. Each also gets hand-written `FromJSON` and `ToJSON` instances, never `anyclass` or generic aeson:
 
 - **Unknown keys.** Decoders ignore unknown keys, for forward compatibility (R5).
 - **No semantic checks.** Decoders apply no semantic checks: a confidence of `1.5` or a negative token count decodes, because the schema allows it (R4).
@@ -207,7 +235,7 @@ Create `src/TypeSafe/Wire/Response.hs` with:
   - `ScoreAnswer { score :: !Scientific, confidence :: !Scientific, legend :: !(Map Text Content), probabilities :: !(Map Text Scientific) }`.
   - `BoxAnswer { box :: !BoxCoordinates, confidence :: !(Maybe Scientific) }`.
   - `BoxCoordinates { top, bottom, left, right :: !Scientific }`.
-  - `Usage { inputTokens :: !Integer, outputTokens :: !Integer }`.
+  - `Usage { inputTokens :: !Int, outputTokens :: !Int }`.
 - **Decoding and helpers.** `decodeSystemOneResponse`, plus two pure helpers that the decoders never call:
   - `unitInterval :: Scientific -> Either Text Double`, which succeeds only for values in [0, 1];
   - `finiteDouble :: Scientific -> Either Text Double`, which uses `Data.Scientific.toBoundedRealFloat` and returns `Left` when the value does not fit a finite `Double`.
@@ -218,7 +246,7 @@ Create `src/TypeSafe/Wire/Response.hs` with:
 - **Known tags.** For `noul`, `choice`, `score` and `box` it decodes the matching record from the same object. A malformed known answer fails; it is never demoted to `AnswerOther`.
 - **Unknown tags.** For any other tag it returns `AnswerOther tag object`, keeping the complete object, including its `type` key.
 
-Each variant record (`NoulAnswer`, `ChoiceAnswer`, `ScoreAnswer`, `BoxAnswer`) owns its tag in both directions: its own `toEncoding` and `toJSON` write `"type"` first, followed by its fields, and its own `FromJSON` requires `"type"` with the right value. `ToJSON Answer` and `FromJSON Answer` only dispatch to the variant instances. This matters because the specification marks `type` as required on each variant schema, and EP-5's conformance suite encodes and decodes the variant records on their own. For `AnswerOther`, it writes the stored object unchanged. Required keys use `.:`. All numbers are decoded as `Scientific`. `Usage` uses the bounded integral parser described in the Decision Log. Milestone 3's location indices need the same rule, so put the parser (for example `parseBoundedIntegral :: Value -> Parser Integer`) in an internal module `src/TypeSafe/Wire/Internal/Number.hs`, listed in the library's `other-modules` so it is shared without being exported.
+Each variant record (`NoulAnswer`, `ChoiceAnswer`, `ScoreAnswer`, `BoxAnswer`) owns its tag in both directions: its own `toEncoding` and `toJSON` write `"type"` first, followed by its fields, and its own `FromJSON` requires `"type"` with the right value. `ToJSON Answer` and `FromJSON Answer` only dispatch to the variant instances. This matters because the specification marks `type` as required on each variant schema, and EP-5's conformance suite encodes and decodes the variant records on their own. For `AnswerOther`, it writes the stored object unchanged. Required keys use `.:`. All numbers are decoded as `Scientific`. `Usage` uses the bounded integral parser described in the Decision Log: it rejects a value that is not integral, and one that does not fit an `Int`. Milestone 3's location indices need the same rule, so put the parser `parseBoundedIntegral :: Value -> Parser Int` in an internal module `src/TypeSafe/Wire/Internal/Number.hs`, listed in the library's `other-modules` so it is shared without being exported.
 
 Write the golden files:
 
@@ -241,7 +269,7 @@ Write the golden files:
 
 Create `test/TypeSafe/Wire/ResponseTests.hs` with a subgroup `success bodies` whose tests assert:
 
-- **The golden decodes** to a value equal to a hand-built `SystemOneResponse`:
+- **The golden decodes** to a value equal to a hand-built `SystemOneResponse`, written with record construction syntax. Inspect individual fields with record dot syntax, for example `resp.usage.inputTokens`:
   - model `"jev-fixture-version"`;
   - `urgent` is `AnswerNoul (NoulAnswer 0.83)`;
   - `category` has choice `"technical"`, confidence `0.65` and probabilities billing `0.2`, technical `0.7`;
@@ -258,7 +286,10 @@ Create `test/TypeSafe/Wire/ResponseTests.hs` with a subgroup `success bodies` wh
   - box `confidence`.
 - **A null box confidence is allowed.** A box answer with `"confidence": null` decodes to `Nothing`.
 - **Huge numbers survive.** A noul answer `{"type": "noul", "noul": 1e400}` decodes to `Data.Scientific.scientific 1 400`. `finiteDouble` of that value returns `Left`, and `unitInterval 1.5` returns `Left`. A choice answer with `"confidence": 1.5` still decodes: the wire layer does not validate.
-- **Token counts must be integral.** `{"input_tokens": 3.5, "output_tokens": 1}` fails, and `{"input_tokens": 1.2e3, "output_tokens": 0}` decodes to `1200`, because it is integral.
+- **Token counts must be integral and fit an `Int`.**
+  - `{"input_tokens": 3.5, "output_tokens": 1}` fails, because the value is not integral.
+  - `{"input_tokens": 1e30, "output_tokens": 1}` fails, because the value is outside `Int`'s range.
+  - `{"input_tokens": 1.2e3, "output_tokens": 0}` decodes to `1200`, because it is integral.
 - **Unknown tags are surfaced.** An answer `{"type": "polygon", "points": [1, 2]}` decodes to `AnswerOther "polygon" obj`, where `obj` still contains both keys. Encoding it gives back a structurally equal object.
 - **Bad tags fail.** An answer with no `type`, or with `"type": 7`, fails.
 - **Unknown keys are ignored.** A known answer with an extra key such as `"rationale": "x"` decodes.
@@ -300,9 +331,9 @@ Add a subgroup `model listing` to `test/TypeSafe/Wire/ResponseTests.hs`, or to a
 
 Create `src/TypeSafe/Wire/Error.hs` with:
 
-- `LocationSegment`, with the constructors `LocationField !Text | LocationIndex !Integer`.
+- `LocationSegment`, with the constructors `LocationField !Text | LocationIndex !Int`.
   - Decoding a string gives a field.
-  - Decoding an integral number gives an index, using the bounded integral rule.
+  - Decoding an integral number that fits an `Int` gives an index, using `parseBoundedIntegral`.
   - Anything else fails.
 - `ValidationError { loc :: !(Vector LocationSegment), msg :: !Text, type_ :: !Text, input :: !(Maybe Value), ctx :: !(Maybe Object) }`. The JSON key of `type_` is `type`, and `input` follows the direct-lookup rule in the Decision Log.
 - `HTTPValidationError { detail :: !(Maybe (Vector ValidationError)) }`.
@@ -338,6 +369,7 @@ Add a subgroup `error bodies` with one test per form. Each body and its expected
 - `{"error": {"message": "invalid api key"}}`, `{"error": "plain string"}`, `{"message": "top-level message"}` and `{"code": 7}` each give `ErrorBodyJson` of exactly that value.
 - `{"detail": [{"msg": "no loc"}]}` gives `ErrorBodyJson`: an element is not a valid `ValidationError`, so there is no partial report.
 - `{"detail": [{"loc": [1.5], "msg": "m", "type": "t"}]}` gives `ErrorBodyJson`, because the index is not integral.
+- `{"detail": [{"loc": [1e30], "msg": "m", "type": "t"}]}` gives `ErrorBodyJson`, because the index does not fit an `Int`.
 - `<h1>bad gateway</h1>` gives `ErrorBodyText "<h1>bad gateway</h1>"`.
 - The bytes `0xff 0xfe` give `ErrorBodyText` holding replacement characters, and the test must not throw.
 - The empty string gives `ErrorBodyEmpty`.
@@ -401,7 +433,7 @@ ghci> parseErrorBody "{\"detail\":\"nope\"}"
 ErrorBodyDetailText "nope"
 ```
 
-The exact `Show` output of the newtypes depends on how EP-1 derived them; what matters is `1.0e400` rather than `Infinity`.
+The exact `Show` output of the newtypes depends on how EP-1 derived them; what matters is `1.0e400` rather than `Infinity`. Under `NoFieldSelectors`, read a field in the REPL with record dot syntax, for example `fmap (.usage.inputTokens) (decodeSystemOneResponse body)`, after `:set -XOverloadedRecordDot` if the REPL has not inherited it.
 
 Before committing, format and check:
 
@@ -432,7 +464,7 @@ The plan is accepted when all of the following hold.
 
 **R11 response half.** `test/golden/baikai-response.json` decodes to the hand-built expected value, with `confidence`, `score` and `legend` present. Decoding fails for `test/golden/baikai-response-missing-confidence.json` and for `test/golden/baikai-response-missing-score.json`.
 
-**R4.** The number `1e400` decodes intact as a `Scientific`. `finiteDouble` and `unitInterval` reject out-of-range values, but the decoders never call them. A fractional token count fails, and an integral one written in exponent form succeeds.
+**R4.** The number `1e400` decodes intact as a `Scientific`. `finiteDouble` and `unitInterval` reject out-of-range values, but the decoders never call them. A fractional token count fails, and so does one outside `Int`'s range. An integral one written in exponent form succeeds.
 
 **R5.** Removing any required key listed in Milestone 1 makes decoding fail. Unknown extra keys are ignored. An unknown answer tag decodes to `AnswerOther` with the complete object, and that object re-encodes unchanged. A malformed known answer fails rather than becoming `AnswerOther`.
 
@@ -491,19 +523,27 @@ module TypeSafe.Wire.Response
 
 data SystemOneResponse = SystemOneResponse
   { model :: !ModelName, answers :: !(Map QuestionName Answer), usage :: !Usage }
+  deriving stock (Generic, Eq, Show)
 data Answer
   = AnswerNoul !NoulAnswer | AnswerChoice !ChoiceAnswer | AnswerScore !ScoreAnswer
   | AnswerBox !BoxAnswer | AnswerOther !Text !Object
+  deriving stock (Generic, Eq, Show)
 data NoulAnswer = NoulAnswer { noul :: !Scientific }
+  deriving stock (Generic, Eq, Show)
 data ChoiceAnswer = ChoiceAnswer
   { choice :: !Text, confidence :: !Scientific, probabilities :: !(Map Text Scientific) }
+  deriving stock (Generic, Eq, Show)
 data ScoreAnswer = ScoreAnswer
   { score :: !Scientific, confidence :: !Scientific
   , legend :: !(Map Text Content), probabilities :: !(Map Text Scientific) }
+  deriving stock (Generic, Eq, Show)
 data BoxAnswer = BoxAnswer { box :: !BoxCoordinates, confidence :: !(Maybe Scientific) }
+  deriving stock (Generic, Eq, Show)
 data BoxCoordinates = BoxCoordinates
   { top :: !Scientific, bottom :: !Scientific, left :: !Scientific, right :: !Scientific }
-data Usage = Usage { inputTokens :: !Integer, outputTokens :: !Integer }
+  deriving stock (Generic, Eq, Show)
+data Usage = Usage { inputTokens :: !Int, outputTokens :: !Int }
+  deriving stock (Generic, Eq, Show)
 
 decodeSystemOneResponse :: Data.ByteString.Lazy.ByteString -> Either Text SystemOneResponse
 unitInterval :: Scientific -> Either Text Double
@@ -511,25 +551,40 @@ finiteDouble :: Scientific -> Either Text Double
 
 -- src/TypeSafe/Wire/Models.hs
 data ModelMetadataList = ModelMetadataList { models :: !(Vector ModelMetadata) }
+  deriving stock (Generic, Eq, Show)
 data ModelMetadata = ModelMetadata
   { name :: !ModelName, description :: !Text, releaseDate :: !Text }
+  deriving stock (Generic, Eq, Show)
 releaseDay :: ModelMetadata -> Maybe Data.Time.Calendar.Day
 
 -- src/TypeSafe/Wire/Error.hs
-data LocationSegment = LocationField !Text | LocationIndex !Integer
+data LocationSegment = LocationField !Text | LocationIndex !Int
+  deriving stock (Generic, Eq, Show)
 data ValidationError = ValidationError
   { loc :: !(Vector LocationSegment), msg :: !Text, type_ :: !Text
   , input :: !(Maybe Value), ctx :: !(Maybe Object) }
+  deriving stock (Generic, Eq, Show)
 data HTTPValidationError = HTTPValidationError { detail :: !(Maybe (Vector ValidationError)) }
+  deriving stock (Generic, Eq, Show)
 data ErrorDetail = ErrorDetail { errorType :: !(Maybe Text), message :: !Text }
+  deriving stock (Generic, Eq, Show)
 data ErrorBody = ErrorBodyValidation !HTTPValidationError | ErrorBodyDetail !ErrorDetail
   | ErrorBodyDetailText !Text | ErrorBodyJson !Value | ErrorBodyText !Text | ErrorBodyEmpty
+  deriving stock (Generic, Eq, Show)
 parseErrorBody :: Data.ByteString.Lazy.ByteString -> ErrorBody
 ```
 
-Every type has `Eq`, `Show`, `FromJSON` and `ToJSON`, the last with a hand-written `toEncoding`, except `ErrorBody`, which has `Eq` and `Show` only. `TypeSafe.Wire` re-exports all of the above.
+Every type has `deriving stock (Generic, Eq, Show)` and hand-written `FromJSON` and `ToJSON` instances, the latter with a hand-written `toEncoding`. The exception is `ErrorBody`, which has only the stock `Generic`, `Eq` and `Show`. Because `NoFieldSelectors` is on, exporting `Type (..)` exports the fields for construction, pattern matching and `HasField` only: no selector functions exist. `TypeSafe.Wire` re-exports all of the above.
 
 **Consumers:**
 
 - EP-4 ([docs/plans/4-bind-the-system-one-api-with-servant-and-servant-client.md](4-bind-the-system-one-api-with-servant-and-servant-client.md)) uses `SystemOneResponse` and `ModelMetadataList` in the servant `API` type. Its mock server uses their `ToJSON` instances and `HTTPValidationError`'s, and it uses `parseErrorBody` on `FailureResponse` bodies. It also reuses `test/golden/baikai-response.json`.
 - EP-5 ([docs/plans/5-prove-conformance-with-the-vendored-openapi-document.md](5-prove-conformance-with-the-vendored-openapi-document.md)) binds each of these types to its schema name: `SystemOneResponse`, `Answer`, `NoulAnswer`, `ChoiceAnswer`, `ScoreAnswer`, `BoxAnswer`, `BoxCoordinates`, `Usage`, `ModelMetadataList`, `ModelMetadata`, `HTTPValidationError` and `ValidationError`. It checks the property-to-field names described above. `ErrorDetail` and `ErrorBody` have no schema and are not bound.
+
+Revision note (2026-10-21): aligned with the masterplan's haskell-jitsurei change set (C2–C5). The changes are:
+- explicit `deriving stock (Generic, Eq, Show)` on every type;
+- postpositive imports;
+- `NoFieldSelectors`, with record-dot access and no record update syntax;
+- `Usage` token counts and `LocationIndex` changed from `Integer` to `Int`, decoded by an `Int`-bounded parser that rejects non-integral and out-of-range values.
+
+The earlier `Int64`-to-`Integer` decision is kept and marked superseded.

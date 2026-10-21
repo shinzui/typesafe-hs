@@ -11,6 +11,12 @@ provenance:
     model: "claude-opus-5-5"
     harness: "claude-code"
     at: 2026-10-21T17:50:12Z
+  revisions:
+    - model: "claude-opus-5-5"
+      harness: "claude-code"
+      at: 2026-10-21T18:07:26Z
+      mode: "update"
+      note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
 ---
 
 # Encode System One requests deterministically
@@ -57,8 +63,21 @@ The governing requirements are R2, R3, R7, R8 and R11 in [docs/initial-spec.md](
   Rationale: R3 says uniqueness is "checked by a smart constructor or reported by a pure validation function, not silently collapsed". The parent MasterPlan chose plain `Vector` fields with reporting functions. Collapsing would hide a caller error that Baikai's validator wants to report.
   Date: 2026-10-21
 
-- Decision: the request type `assets` field is `Maybe (Map Text Asset)`, with `Nothing` omitted. The map's key order (ascending `Text`) is the encoding order.
+- Decision (superseded by the `Map Text Asset` entry below, 2026-10-21): the request type `assets` field is `Maybe (Map Text Asset)`, with `Nothing` omitted. The map's key order (ascending `Text`) is the encoding order.
   Rationale: asset placeholders carry no caller-meaningful order, and a `Map` is already deterministic. R3's ordered-sequence rule applies to questions and choice criteria only.
+  Date: 2026-10-21
+
+- Decision: `assets` is a plain `Map Text Asset`. It is encoded only when non-empty, an empty map is omitted, and an absent key decodes to `Map.empty`. The map's key order (ascending `Text`) is still the encoding order.
+  Rationale: `Maybe (Map Text Asset)` had two ways to say "no assets" (`Nothing` and `Just Map.empty`). An empty map is invalid on the wire anyway, because the document sets `minProperties: 1`. Encoding a decoded `"assets": {}` therefore drops the key; that is acceptable because such input is outside the schema. This is change C6 of the parent MasterPlan's alignment with haskell-jitsurei.
+  Date: 2026-10-21
+
+- Decision: the module follows the haskell-jitsurei conventions adopted by the parent MasterPlan:
+  - postpositive qualified imports (`import Data.Vector qualified as Vector`), from `mori://shinzui/haskell-jitsurei/docs/core-standards`;
+  - an explicit `deriving stock (Generic, Eq, Show)` on every type, with no deriving clause lacking a strategy, from `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`;
+  - `NoFieldSelectors`, so record fields are read with record dot syntax or generic-lens `#label`, and are never exported as top-level functions.
+
+  JSON instances stay hand-written.
+  Rationale: `DeriveAnyClass` is on in the common stanza, so a deriving clause without a strategy could silently produce an empty instance. `Generic` lets consumers who follow jitsurei's record pattern use `#instructions` and `#criteria` without this library depending on `lens`, which R1 forbids. `NoFieldSelectors` stops fields named `state`, `model`, `true` and `false` from becoming functions that clash with mtl's `state` or with a consumer's own names. Generic aeson is ruled out, because R3 needs fixed key orders and the absent-versus-null rules.
   Date: 2026-10-21
 
 
@@ -73,11 +92,11 @@ The repository is `typesafe-hs`, a Haskell library for TypeSafe's System One HTT
 
 **Prerequisite: EP-1.** This plan starts only after [docs/plans/1-scaffold-the-package-and-vendor-the-system-one-specification.md](1-scaffold-the-package-and-vendor-the-system-one-specification.md) is Complete. That plan provides the following:
 
-- **`typesafe-hs.cabal` and `cabal.project` at the repository root.** The package has a common stanza (`GHC2024`, `DuplicateRecordFields`, `OverloadedRecordDot`, `OverloadedStrings`, `-Wall`), a `library` with `hs-source-dirs: src`, and one test suite, `typesafe-hs-test`, using `tasty`, with `hs-source-dirs: test` and `main-is: Main.hs`.
+- **`typesafe-hs.cabal` and `cabal.project` at the repository root.** The package has a common stanza: `GHC2024`, the haskell-jitsurei baseline extensions `DeriveAnyClass`, `DuplicateRecordFields`, `OverloadedLabels` and `OverloadedStrings`, plus `NoFieldSelectors` and `OverloadedRecordDot`, and `-Wall`. The test suite adds `MultilineStrings`, and `cabal.project` makes `-Werror=missing-fields` fatal for local builds. It also has a `library` with `hs-source-dirs: src`, and one test suite, `typesafe-hs-test`, using `tasty`, with `hs-source-dirs: test` and `main-is: Main.hs`.
 - **`spec/openapi.json`.** TypeSafe's OpenAPI document, the machine-readable API description, as published at https://api.typesafe.ai/openapi.json on 2026-10-21. It is normalised with `jq -S .` and its `info.version` is `0.2.0`.
 - **`src/TypeSafe/Wire/Common.hs`.** The shared primitives:
   - `apiSpecVersion`;
-  - `newtype ModelName = ModelName Text` and `newtype QuestionName = QuestionName Text`, both with `IsString`, `Eq`, `Ord`, `Show`, `ToJSON`, `FromJSON`, `ToJSONKey` and `FromJSONKey`;
+  - `newtype ModelName = ModelName Text` and `newtype QuestionName = QuestionName Text`, both with `deriving stock (Generic, Show)` and `deriving newtype (Eq, Ord, IsString, ToJSON, FromJSON, ToJSONKey, FromJSONKey)`;
   - `jevLatest` and `jevPreview`;
   - `data Content = ContentText Text | ContentObject Object | ContentArray Array`. Its `ToJSON` includes `toEncoding`, and its `FromJSON` rejects numbers, booleans and null;
   - `contentFromValue` and `contentToValue`;
@@ -102,7 +121,7 @@ The parallel sibling [docs/plans/3-decode-system-one-responses-model-listings-an
   - `model` is a string.
   - `state` is a string, object or array, never null, number or boolean.
   - `questions` is an object, with at least one property, mapping each question name to a `Question`.
-  - `assets` is an object, with at least one property, mapping a placeholder string to an `Asset`.
+  - `assets` is an object, with at least one property, mapping a placeholder string to an `Asset`. The Haskell field is a plain `Map Text Asset`; an empty map is omitted on encode, and an absent key decodes to `Map.empty`.
 - **`Question`** is a `oneOf` with discriminator `type`, mapping `noul`, `choice`, `score` and `box` to the four schemas below.
 - **`NoulQuestion`** requires `type`, which is the constant `"noul"`.
   - `instructions` is optional: string, object, array or null.
@@ -123,7 +142,9 @@ The parallel sibling [docs/plans/3-decode-system-one-responses-model-listings-an
 
 **Representation rules fixed by the MasterPlan.**
 
-- *Field names.* Each record field takes the property's name verbatim. Snake case becomes lower camel case (`data_base64` becomes `dataBase64`), and no field carries a type-name prefix (R2). Because `DuplicateRecordFields` is on, several records may share a field named `instructions` or `criteria`. Consumers read them with `OverloadedRecordDot` (`q.instructions`).
+- *Field names.* Each record field takes the property's name verbatim. Snake case becomes lower camel case (`data_base64` becomes `dataBase64`), and no field carries a type-name prefix (R2). Because `DuplicateRecordFields` is on, several records may share a field named `instructions` or `criteria`.
+- *No selector functions.* `NoFieldSelectors` is on, so no field becomes a top-level function: `TypeSafe.Wire` exports no `state`, `model`, `true` or `false` function to clash with mtl's `state` or a consumer's own names. Consumers read fields with `OverloadedRecordDot` (`q.instructions`), or with generic-lens (`q ^. #instructions`), which works because every type derives `Generic`. Record construction and pattern matching, including field puns, work as usual. Library and test code never use record-update syntax on these types; they construct new records instead.
+- *Deriving and imports.* Every deriving clause names its strategy (`deriving stock (Generic, Eq, Show)`), because `DeriveAnyClass` is on. Qualified imports are postpositive (`import Data.Vector qualified as Vector`). Both conventions come from haskell-jitsurei: `mori://shinzui/haskell-jitsurei/docs/core-standards` and `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`. The library does not depend on `lens` or `generic-lens`.
 - *The discriminator.* The `type` property is implied by the constructor, never stored as a field. On `Asset` it is implied by the type: written on encode, and accepted on decode when absent or equal to `"image"`.
 - *Nullable positions.* `Content` has no null constructor, so positions where the schema allows null use `Maybe Content`, under these rules:
   - In a required-but-nullable slot, a choice-criteria map value, `Nothing` encodes as JSON `null`.
@@ -145,12 +166,14 @@ toEncoding q =
 
 That SDK uses prefixed field names and `Map QuestionId Question` for questions, which loses the caller's question order. Do not copy either choice.
 
-**ADRs.** Read the ADR EP-1 created about the wire types mirroring the vendored specification (under `docs/adr/`; scan the filenames). It records the naming, both-directions and unknown-tag rules summarised above. No other local ADR applies. The cross-repository context is Baikai's boundary decisions: `mori://shinzui/baikai`, project-relative paths `docs/adr/0005-what-baikai-deliberately-does-not-do.md` and `docs/adr/0011-core-owns-transport-failure-classification.md` (artifact-level URIs pending). They only require that this module contain no policy; nothing here retries or classifies.
+**ADRs.** Read the ADRs EP-1 created under `docs/adr/` (scan the filenames). The one on the wire types mirroring the vendored specification records the naming, both-directions and unknown-tag rules summarised above. `docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md` records which haskell-jitsurei conventions apply and why generic aeson, lens dependencies and a custom prelude are declined. No other local ADR applies. The cross-repository context is Baikai's boundary decisions: `mori://shinzui/baikai`, project-relative paths `docs/adr/0005-what-baikai-deliberately-does-not-do.md` and `docs/adr/0011-core-owns-transport-failure-classification.md` (artifact-level URIs pending). They only require that this module contain no policy; nothing here retries or classifies.
 
 
 ## Plan of Work
 
 **Milestone 1: request types and codecs.** Create `src/TypeSafe/Wire/Request.hs`, exporting the types listed under Interfaces and Dependencies, and implement their codecs.
+
+Declare every type with `deriving stock (Generic, Eq, Show)`; `ImageFormat` also derives `Enum` and `Bounded` in the same stock clause. Use postpositive qualified imports throughout, for example `import Data.Aeson.KeyMap qualified as KeyMap` and `import Data.Map.Strict qualified as Map`. Because `NoFieldSelectors` is on, instance code reads fields with record dot syntax (`req.questions`) or by pattern matching (`SystemOneRequest {model, state, questions, assets}`). It never applies a selector function.
 
 Hand-write every `ToJSON` instance with both `toJSON` and `toEncoding`. The `toEncoding` side must use `pairs` and a `Series` in the fixed key order from the Decision Log, and must never call `toJSON` or go through `Value` (R3). Omit an optional field with a small local helper. For example, `optionalPair :: ToJSON a => Key -> Maybe a -> Series` returns `mempty` for `Nothing`.
 
@@ -161,6 +184,7 @@ Each container gets its own encoding:
 - **Score criteria.** Encode them as a JSON array of `Content`.
 - **Content.** `Content`'s own `toEncoding`, from EP-1, writes objects and arrays by delegating to aeson's `Object` and `Array` encodings. Those order object keys by aeson's `KeyMap`, which is deterministic for a given value.
 - **`QuestionOther tag obj`.** Encode `KeyMap.insert "type" (String tag) obj` through `toEncoding`, so the original object, including any fields this library does not model, goes out unchanged.
+- **Assets.** Emit the `assets` pair only when `not (Map.null req.assets)`. Decode it with `.:?` and `fromMaybe Map.empty`.
 
 Define `encodeSystemOneRequest = Data.Aeson.encodingToLazyByteString . toEncoding`. It is the same function aeson's `encode` applies, which is why EP-4's servant body will be byte-equal to it.
 
@@ -193,7 +217,7 @@ Create the two golden files this plan owns:
 
 Write it with `printf '%s' '…' > test/golden/baikai-request.bytes`, so that no newline is appended. The repository's treefmt formatters (fourmolu, cabal-gild, nixpkgs-fmt) do not touch `.bytes` or `.json` files.
 
-In the test module, build the fixture value in Haskell using record syntax and `OverloadedRecordDot` reads. That also proves the plain field names compile for a consumer (R2). The tests are:
+In the test module, build the fixture value in Haskell with record construction syntax, and read fields back with `OverloadedRecordDot` (for example `fixture.model`). That proves the plain field names work for a consumer under `NoFieldSelectors` (R2). Do not use record-update syntax: build each variant value afresh. Inline JSON inputs may use `MultilineStrings` (`"""` literals), which the test-suite stanza enables. The tests are:
 
 1. **Structural golden (R11).** `decode` the output of `encodeSystemOneRequest fixture` and the contents of `baikai-request.json` into `Value`, and assert they are equal.
 2. **Bytes golden (R3).** `encodeSystemOneRequest fixture` equals the contents of `baikai-request.bytes`.
@@ -208,9 +232,10 @@ In the test module, build the fixture value in Haskell using record syntax and `
    - Decoding `{"type":"noul","instructions":null}` gives `instructions = Nothing`.
 7. **Content is not stringified (R7).** A `state` of `ContentObject` and one of `ContentArray` encode as a JSON object and array. Decoding a request whose `state` is `42` or `null` fails.
 8. **Unknown question type.** `{"type":"future","x":[1,2]}` decodes to `QuestionOther "future" obj`, and re-encodes to a value equal to the input.
-9. **Each variant decodes.** Decode each named request example under `paths."/v1/systemone".post.requestBody.content."application/json".examples` in `spec/openapi.json` (noul, choice, score and box, the last one with `assets` and `format: "png"`). Each is a `SystemOneRequest` with the expected constructor. Reading the file with `Data.Aeson.eitherDecodeFileStrict` is enough; there is no need for EP-5's schema machinery.
-10. **Duplicates are reported, not collapsed.** A request with two questions named `a` reports `["a"]` from `duplicateQuestionNames`, and its bytes contain `"a":` twice. A choice question with repeated `billing` reports `["billing"]`.
-11. **Required fields.** Decoding a choice question without `criteria`, a score question with `"criteria": []`, or a request without `state` fails.
+9. **Empty assets are omitted (C6).** A request with `assets = Map.empty` encodes with no `assets` key: its bytes contain no `"assets"`. A request whose JSON has no `assets` key decodes to `assets == Map.empty`. A request with one asset encodes `"assets":{"photo":{"type":"image",...}}` after `questions`.
+10. **Each variant decodes.** Decode each named request example under `paths."/v1/systemone".post.requestBody.content."application/json".examples` in `spec/openapi.json` (noul, choice, score and box, the last one with `assets` and `format: "png"`). Each is a `SystemOneRequest` with the expected constructor. Reading the file with `Data.Aeson.eitherDecodeFileStrict` is enough; there is no need for EP-5's schema machinery.
+11. **Duplicates are reported, not collapsed.** A request with two questions named `a` reports `["a"]` from `duplicateQuestionNames`, and its bytes contain `"a":` twice. A choice question with repeated `billing` reports `["billing"]`.
+12. **Required fields.** Decoding a choice question without `criteria`, a score question with `"criteria": []`, or a request without `state` fails.
 
 Milestone 2 is accepted when `cabal test` reports the group passing, and each test fails when its expectation is deliberately broken. Check this once by temporarily swapping two keys in the `toEncoding` of `SystemOneRequest`: the bytes golden must fail.
 
@@ -232,10 +257,11 @@ cabal repl typesafe-hs
 ```
 
 ```haskell
-:set -XOverloadedStrings
+:set -XOverloadedStrings -XDuplicateRecordFields -XOverloadedRecordDot
 import TypeSafe.Wire
-import qualified Data.Vector as V
-encodeSystemOneRequest SystemOneRequest { model = jevLatest, state = ContentText "hi", questions = V.fromList [("b", QuestionBox BoxQuestion { instructions = Nothing })], assets = Nothing }
+import Data.Vector qualified as Vector
+import Data.Map.Strict qualified as Map
+encodeSystemOneRequest SystemOneRequest { model = jevLatest, state = ContentText "hi", questions = Vector.fromList [("b", QuestionBox BoxQuestion { instructions = Nothing })], assets = Map.empty }
 ```
 
 ```text
@@ -289,7 +315,8 @@ The plan is accepted when all of the following hold:
 1. `cabal build all` succeeds, and the new module adds no warnings under `-Wall`.
 2. `cabal test` passes, including every test in the `TypeSafe.Wire.Request` group listed in Milestone 2.
 3. `encodeSystemOneRequest` of the R11 fixture equals `test/golden/baikai-request.bytes` exactly. Swapping two keys in the request's `toEncoding` makes that test fail, which proves the test is not vacuous.
-4. `TypeSafe.Wire` alone exports everything a consumer needs to build and encode a request.
+4. `TypeSafe.Wire` alone exports everything a consumer needs to build and encode a request. It exports no field-selector functions: in `cabal repl`, `:t state` resolves to nothing from `TypeSafe.Wire` (only `fixture.state` works).
+5. Every type in `TypeSafe.Wire.Request` has an explicit-strategy `deriving stock (Generic, Eq, Show)` clause, and no file the plan adds uses a prepositive `import qualified`.
 
 The byte-equality check that the same bytes leave through servant-client is EP-4's representative producer/consumer check, owned by [docs/plans/4-bind-the-system-one-api-with-servant-and-servant-client.md](4-bind-the-system-one-api-with-servant-and-servant-client.md). This plan makes it possible by routing aeson's `encode` through the same `toEncoding`. Schema-level conformance (every property encoded, required versus optional, discriminator tags) is EP-5's and is not required here.
 
@@ -309,17 +336,18 @@ If a golden file is accidentally given a trailing newline, the bytes test fails 
 
 **Prerequisite.** [docs/plans/1-scaffold-the-package-and-vendor-the-system-one-specification.md](1-scaffold-the-package-and-vendor-the-system-one-specification.md) must be Complete. This is the parent MasterPlan's hard dependency, EP-1.
 
-**Libraries.** This plan adds no new library dependencies, beyond what EP-1 lists, from R12's set: `aeson ^>=2.2`, `containers`, `text` and `vector`. `NonEmpty` comes from `base`. The test suite needs only `tasty`, `tasty-hunit`, `aeson`, `bytestring` and `vector`. If EP-1 did not already list one of these, add it to the test-suite stanza.
+**Libraries.** This plan adds no new library dependencies beyond what EP-1 lists. In particular it adds no `lens` or `generic-lens`: `Generic` comes from `base`. It uses only these, from from R12's set: `aeson ^>=2.2`, `containers`, `text` and `vector`. `NonEmpty` comes from `base`. The test suite needs only `tasty`, `tasty-hunit`, `aeson`, `bytestring` and `vector`. If EP-1 did not already list one of these, add it to the test-suite stanza.
 
-**Module.** `src/TypeSafe/Wire/Request.hs`, module `TypeSafe.Wire.Request`, defines the following. All types derive `Eq` and `Show`, and every field is strict.
+**Module.** `src/TypeSafe/Wire/Request.hs`, module `TypeSafe.Wire.Request`, defines the following. Every field is strict, and every type derives `Generic`, `Eq` and `Show` with an explicit `stock` strategy. Under `NoFieldSelectors` the fields are read with record dot syntax or generic-lens `#label`, never with selector functions.
 
 ```haskell
 data SystemOneRequest = SystemOneRequest
   { model :: !ModelName,
     state :: !Content,
     questions :: !(Vector (QuestionName, Question)),
-    assets :: !(Maybe (Map Text Asset))
+    assets :: !(Map Text Asset) -- omitted on the wire when empty
   }
+  deriving stock (Generic, Eq, Show)
 
 data Question
   = QuestionNoul !NoulQuestion
@@ -327,42 +355,52 @@ data Question
   | QuestionScore !ScoreQuestion
   | QuestionBox !BoxQuestion
   | QuestionOther !Text !Object -- tag, and the complete object as received
+  deriving stock (Generic, Eq, Show)
 
 data NoulQuestion = NoulQuestion
   { instructions :: !(Maybe Content),
     criteria :: !(Maybe NoulCriteria)
   }
+  deriving stock (Generic, Eq, Show)
 
 data NoulCriteria = NoulCriteria
   { true :: !(Maybe Content),
     false :: !(Maybe Content)
   }
+  deriving stock (Generic, Eq, Show)
 
 data ChoiceQuestion = ChoiceQuestion
   { instructions :: !(Maybe Content),
     criteria :: !(Vector (Text, Maybe Content))
   }
+  deriving stock (Generic, Eq, Show)
 
 data ScoreQuestion = ScoreQuestion
   { instructions :: !(Maybe Content),
     criteria :: !(NonEmpty Content)
   }
+  deriving stock (Generic, Eq, Show)
 
 newtype BoxQuestion = BoxQuestion {instructions :: Maybe Content}
+  deriving stock (Generic, Eq, Show)
 
 data ImageFormat = ImageFormatPng | ImageFormatJpg | ImageFormatJpeg
+  deriving stock (Generic, Eq, Show, Enum, Bounded)
 
 data Asset = Asset
   { format :: !(Maybe ImageFormat),
     dataBase64 :: !(Maybe Text),
     part :: !(Maybe Text)
   }
+  deriving stock (Generic, Eq, Show)
 
 encodeSystemOneRequest :: SystemOneRequest -> Data.ByteString.Lazy.ByteString
 duplicateQuestionNames :: SystemOneRequest -> [QuestionName]
 duplicateChoiceLabels :: ChoiceQuestion -> [Text]
 ```
 
-Every type above gets `ToJSON` and `FromJSON` instances, and `ImageFormat` also derives `Enum` and `Bounded`. `BoxQuestion` may be a `data` rather than a `newtype` if strictness or `DuplicateRecordFields` makes that simpler.
+Every type above gets hand-written `ToJSON` and `FromJSON` instances, never `deriving anyclass` or generic aeson. `BoxQuestion` may be a `data` rather than a `newtype` if strictness or `DuplicateRecordFields` makes that simpler.
 
 `src/TypeSafe/Wire.hs` adds `module TypeSafe.Wire.Request` to its export list. EP-4 consumes `SystemOneRequest`'s `ToJSON` instance in its servant `ReqBody '[JSON]`. EP-5 consumes all of these types and both codec directions, and binds the schema names `SystemOneRequest`, `Question`, `NoulQuestion`, `NoulCriteria`, `ChoiceQuestion`, `ScoreQuestion`, `BoxQuestion` and `Asset` to them.
+
+Revision note (2026-10-21): aligned with the parent MasterPlan's haskell-jitsurei change set. The plan now uses postpositive imports and explicit `deriving stock (Generic, Eq, Show)` on every type, adopts `NoFieldSelectors` with record-dot-only access in the tests, and changes `assets` to a plain `Map Text Asset` that is omitted when empty, with a new test. The Decision Log records each change, and the old `assets` entry is marked superseded.
