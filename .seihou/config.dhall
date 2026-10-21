@@ -1,0 +1,2 @@
+{ `git.repoName` = "typesafe-hs"
+}
