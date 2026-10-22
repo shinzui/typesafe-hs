@@ -17,6 +17,12 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:15:28Z
+      verdict: "comments"
+      note: "servant-client re-export claim verified; record dot does work on NamedRoutes client fields (GHC 9.12.4, servant 0.20.3), so FieldSelectors is a style choice not a necessity; servant checkout paths omit the servant/ directory"
 ---
 
 # Bind the System One API with servant and servant-client

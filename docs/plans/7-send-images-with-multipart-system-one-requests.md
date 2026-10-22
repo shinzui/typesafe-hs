@@ -15,6 +15,12 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:15:28Z
+      verdict: "comments"
+      note: "Not a registry child; prerequisite framing consistent; inherits the refuted record-dot-on-NamedRoutes premise from EP-4"
 ---
 
 # Send images with multipart System One requests

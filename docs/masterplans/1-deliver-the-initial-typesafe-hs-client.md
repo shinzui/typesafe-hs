@@ -16,6 +16,12 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Adopt haskell-jitsurei conventions and idiom-review changes across child plans; ADR 0005 records declined patterns"
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:15:28Z
+      verdict: "changes-requested"
+      note: "Decomposition sound; EP-5 puts -Werror=incomplete-patterns in the .cabal test stanza, contradicting EP-6 acceptance and Integration Points; the EP-4/EP-5 record-dot-on-NamedRoutes premise is refuted on GHC 9.12.4 with servant 0.20.3"
 ---
 
 # Deliver the initial typesafe-hs client

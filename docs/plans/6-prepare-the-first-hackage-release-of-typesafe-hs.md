@@ -17,6 +17,12 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:15:28Z
+      verdict: "comments"
+      note: "Hackage's newest servant-client-core is 0.20.3.0, not 0.21.0.0 (that is the unreleased local checkout); http-client is listed unconditionally although EP-4 adds it only if needed"
 ---
 
 # Prepare the first Hackage release of typesafe-hs

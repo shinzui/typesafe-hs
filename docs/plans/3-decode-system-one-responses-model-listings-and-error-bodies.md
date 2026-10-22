@@ -17,6 +17,12 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+  reviews:
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:15:28Z
+      verdict: "comments"
+      note: "Schema facts verified; state explicit response key orders rather than the required-list order; time bound differs from EP-6's ^>=1.14"
 ---
 
 # Decode System One responses, model listings and error bodies
