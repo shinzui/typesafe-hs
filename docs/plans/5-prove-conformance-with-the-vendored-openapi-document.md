@@ -17,6 +17,11 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:32:09Z
+      mode: "update"
+      note: "Move -Werror=incomplete-patterns to cabal.project; read routes with record dot; rename test modules to SchemaTest and OperationsTest"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -85,13 +90,13 @@ This is requirement R10 of [docs/initial-spec.md](../initial-spec.md). It is chi
   Date: 2026-10-21
 
 - Decision: follow the MasterPlan's alignment with haskell-jitsurei (`mori://shinzui/haskell-jitsurei`) in this plan's test code and expectations.
-  - **Operation binding.** It takes the client record from `genericClient @Routes @Capture` and reads each route with selector application (`V1.systemOne client`), never by destructuring `:<|>`. EP-4 now defines the API as a `NamedRoutes` record and exports `API`, `Routes (..)`, `SystemOneEndpoint` and `ModelsEndpoint`.
+  - **Operation binding.** It takes the client record from `genericClient @Routes @Capture` and reads each route with record dot syntax (`client.systemOne`), never by destructuring `:<|>`. EP-4 now defines the API as a `NamedRoutes` record and exports `API`, `Routes (..)`, `SystemOneEndpoint` and `ModelsEndpoint`.
   - **Integers.** Token counts and `LocationIndex` are `Int`, and the generators stay within `Int`.
   - **Assets.** `SystemOneRequest.assets` is a `Map Text Asset` that is omitted when empty. The generators produce either an empty map or one with at least one entry.
   - **Code style.** Test modules use explicit deriving strategies and postpositive qualified imports. Inline JSON fixtures may use `MultilineStrings`, which EP-1 enables in the test-suite stanza.
   - **`Capture`.** Under `NoFieldSelectors` a record field generates no selector function, so `Capture` is a positional newtype with an explicitly written `runCapture`.
 
-  Rationale: the change set records jitsurei's core standards (`mori://shinzui/haskell-jitsurei/docs/core-standards`), record patterns (`mori://shinzui/haskell-jitsurei/docs/core-record-patterns`) and servant routes pattern (`mori://shinzui/haskell-jitsurei/docs/api-servant-routes`). This suite is where the MasterPlan's codec and binding conventions are checked, so it must check the conventions as revised. Selector application is used for routes because record dot syntax cannot see through a `NamedRoutes` field's `(:-)` type family (jitsurei's "OverloadedRecordDot Does Not Work on Route Fields"). `TypeSafe.V1` re-enables `FieldSelectors` for that reason.
+  Rationale: the change set records jitsurei's core standards (`mori://shinzui/haskell-jitsurei/docs/core-standards`), record patterns (`mori://shinzui/haskell-jitsurei/docs/core-record-patterns`) and servant routes pattern (`mori://shinzui/haskell-jitsurei/docs/api-servant-routes`). This suite is where the MasterPlan's codec and binding conventions are checked, so it must check the conventions as revised. Record dot syntax resolves a `NamedRoutes` field's `(:-)` type family once the mode is concrete, verified on 2026-10-21 with GHC 9.12.4 and servant 0.20.3.0, so routes are read like every other record; the earlier jitsurei pitfall saying otherwise was corrected on 2026-10-22, and `TypeSafe.V1` stays under `NoFieldSelectors`.
   Date: 2026-10-21
 
 
@@ -203,7 +208,7 @@ jq -r '.components.schemas | keys[]' spec/openapi.json
 
   `SystemOneEndpoint` and `ModelsEndpoint` are type synonyms for the two endpoints. Each begins with the required `Authorization` header, and `SystemOneEndpoint` also carries the two optional danger-zone headers.
 
-  `TypeSafe.V1` also exports `Methods`, `getClientEnv` and `makeMethods`. It enables `FieldSelectors` with a module pragma, so the route fields `systemOne` and `models` exist as selector functions.
+  `TypeSafe.V1` also exports `Methods`, `getClientEnv` and `makeMethods`. It stays under the package-wide `NoFieldSelectors`, so the route fields `systemOne` and `models` are read with record dot syntax.
 
   EP-4's Milestone 1 ("EP-4 M1") is the point at which `TypeSafe.V1` exports `API`, `Routes (..)`, `SystemOneEndpoint` and `ModelsEndpoint`, compiling in the library. Only Milestone 4 here needs it.
 
@@ -219,7 +224,7 @@ jq -r '.components.schemas | keys[]' spec/openapi.json
 - Choice-criteria values encode `Nothing` as `null`.
 - `SystemOneRequest.assets` is omitted when the map is empty.
 - Every wire type has `deriving stock (Generic, Eq, Show)`, or, for the newtypes, `deriving stock (Generic, Show)` with the remaining instances derived `newtype`.
-- **`NoFieldSelectors`.** The project's common stanza turns on `NoFieldSelectors`, so record fields do not become top-level functions. Read a wire type's fields with record dot syntax (`r.confidence`), not with selector application. The one exception is the route fields of `TypeSafe.V1.Routes`, described above.
+- **`NoFieldSelectors`.** The project's common stanza turns on `NoFieldSelectors`, so record fields do not become top-level functions. Read every record's fields with record dot syntax (`r.confidence`), the route fields of `TypeSafe.V1.Routes` included.
 
 **Code style for the test modules.** Follow the project's haskell-jitsurei baseline (`mori://shinzui/haskell-jitsurei/docs/core-standards`), which EP-1 sets in the common stanza:
 
@@ -249,7 +254,7 @@ Adapt them; do not depend on that package. It differs in ways that matter here:
 
 All new code is test code under `test/`, compiled only into `typesafe-hs-test`. The library gains nothing. The work is four milestones, each adding one group of tests under a single tasty group named `OpenAPI conformance` that this plan registers in `test/Main.hs`.
 
-The suite needs the parsed document. If EP-1's `test/Main.hs` already loads `spec/openapi.json` for its version test, extend that loading. Otherwise add it. Either way, read the path from the `TYPESAFE_OPENAPI_SPEC` environment variable when it is set, defaulting to `spec/openapi.json`, and pass the same loaded `Spec` to EP-1's version test and to `Conformance.tests`, so that an override checks everything against one document. The override is test-only; the library never reads the environment. Confirm that `spec/openapi.json` is listed in `extra-source-files` in `typesafe-hs.cabal`, so that the test suite also runs from a source distribution (EP-6 relies on this), and add it there if EP-1 did not.
+The suite needs the parsed document. If EP-1's `test/Main.hs` already loads `spec/openapi.json` for its version test, extend that loading. Otherwise add it. Either way, read the path from the `TYPESAFE_OPENAPI_SPEC` environment variable when it is set, defaulting to `spec/openapi.json`, and pass the same loaded `Spec` to EP-1's version test and to `TypeSafe.Conformance.SchemaTest.tests`, so that an override checks everything against one document. The override is test-only; the library never reads the environment. Confirm that `spec/openapi.json` is listed in `extra-source-files` in `typesafe-hs.cabal`, so that the test suite also runs from a source distribution (EP-6 relies on this), and add it there if EP-1 did not.
 
 
 ### Milestone 1: the document reader, the validator, and the vocabulary audits
@@ -305,7 +310,7 @@ response:       description, content
 
 Under `paths`, each path item may contain only HTTP methods, and each operation's `security` may name only schemes defined in `components.securitySchemes`. The function reports offending fields as dotted paths, for example `paths./v1/systemone.post.callbacks`.
 
-Create `test/TypeSafe/Conformance/Spec.hs`, exporting `tests :: Spec -> TestTree`. For this milestone it contains:
+Create `test/TypeSafe/Conformance/SchemaTest.hs`, exporting `tests :: Spec -> TestTree`. For this milestone it contains:
 
 - **"the schema validator understands every keyword in use":** `unsupportedKeywords spec @?= []`.
 - **"every OpenAPI field in use is understood":** `unsupportedOpenApiFields spec @?= []`.
@@ -316,7 +321,7 @@ Create `test/TypeSafe/Conformance/Spec.hs`, exporting `tests :: Spec -> TestTree
   - adding `"application/x-msgpack"` to the request body's `content` makes the content-type check fail.
 - **Validator unit tests:** a handful of hand values. `{"input_tokens": 1, "output_tokens": 2}` is valid for `Usage`, while `1.5` as a token count fails `integer`. `"gif"` fails `Asset.format`'s `enum`. Eleven score criteria fail `maxItems`. `{}` fails `ChoiceQuestion.criteria`'s `minProperties` and `SystemOneResponse.answers`'s `minProperties`.
 
-Register `Conformance.tests` in `test/Main.hs`. Add `tasty-hunit` to the test-suite dependencies if EP-1 did not.
+Register `TypeSafe.Conformance.SchemaTest.tests` in `test/Main.hs`. Add `tasty-hunit` to the test-suite dependencies if EP-1 did not.
 
 Acceptance: `cabal test` passes. A manual run against a copy of the document with `"pattern"` injected fails with a message naming `pattern` (see Concrete Steps).
 
@@ -342,7 +347,7 @@ Create `test/TypeSafe/Test/Arbitrary.hs`, which this plan owns, with orphan `Arb
 
 Port the community SDK's `genText`, which includes non-ASCII and escape characters, so that encoding is exercised on awkward strings.
 
-In `test/TypeSafe/Conformance/Spec.hs`, add an existential binding table:
+In `test/TypeSafe/Conformance/SchemaTest.hs`, add an existential binding table:
 
 ```haskell
 data Binding = forall a. (Arbitrary a, ToJSON a, FromJSON a, Eq a, Show a) =>
@@ -406,9 +411,9 @@ Acceptance: `cabal test` passes. Breaking a codec on purpose makes the named gro
 
 ### Milestone 3: discriminators, unknown tags, examples and constants
 
-Add to `test/TypeSafe/Conformance/Spec.hs`:
+Add to `test/TypeSafe/Conformance/SchemaTest.hs`:
 
-- **Constructors match the discriminators.** Write `knownQuestionTag :: Question -> Maybe Text` and `knownAnswerTag :: Answer -> Maybe Text` as total `case` expressions over every constructor, returning `Nothing` for `QuestionOther`/`AnswerOther`. Compile the test suite with `-Werror=incomplete-patterns`, so that adding a constructor forces an update here. Read each tag from the encoded `type` property of one sample value per constructor; do not hard-code it. Assert that the set of known tags equals `discriminatorTags spec "Question"` (and likewise for `"Answer"`); both mappings contain `box`, `choice`, `noul` and `score`. Assert also that `{"type": "box"}` decodes to the box constructor, not to `QuestionOther`.
+- **Constructors match the discriminators.** Write `knownQuestionTag :: Question -> Maybe Text` and `knownAnswerTag :: Answer -> Maybe Text` as total `case` expressions over every constructor, returning `Nothing` for `QuestionOther`/`AnswerOther`. Add `-Werror=incomplete-patterns` to the `package typesafe-hs` stanza of `cabal.project`, next to EP-1's `-Werror=missing-fields`, so that adding a constructor forces an update here in local builds; it never goes into `typesafe-hs.cabal`. Read each tag from the encoded `type` property of one sample value per constructor; do not hard-code it. Assert that the set of known tags equals `discriminatorTags spec "Question"` (and likewise for `"Answer"`); both mappings contain `box`, `choice`, `noul` and `score`. Assert also that `{"type": "box"}` decodes to the box constructor, not to `QuestionOther`.
 - **Unknown tags pass through unchanged.** `{"type": "rank", "items": [1, 2]}` decodes to `QuestionOther "rank" _`, and `toJSON` of the result equals the input. The same holds for an answer `{"type": "rank", "order": [2, 1]}` and `AnswerOther`. A QuickCheck property over generated `QuestionOther`/`AnswerOther` values, whose tags are drawn from words outside the known set, checks the same re-encoding.
 - **Property-level examples.** For each object schema, as in the community SDK: when every required property has an `examples` entry, the object assembled from the first example of each property validates against the schema and decodes. Also check that each property example on its own validates against that property's schema.
 - **Operation-level examples.** For each entry of `operationExamples`:
@@ -426,7 +431,7 @@ Acceptance: `cabal test` passes, and the listing (see Concrete Steps) shows exam
 
 Do not start this milestone until `TypeSafe.V1` exports `API`, `Routes (..)`, `SystemOneEndpoint` and `ModelsEndpoint` (EP-4 M1). Read `src/TypeSafe/V1.hs` first to learn the exact shape of the `Routes` record and the arguments each client function takes (the `Authorization` header value, the optional danger-zone header values, and the request body).
 
-Create `test/TypeSafe/Conformance/Operations.hs`. It defines a test-only capturing monad and a `RunClient` instance for it. `RunClient` is the class in `servant-client-core`'s `Servant.Client.Core.RunClient` that servant uses to perform a request: its methods are `runRequestAcceptStatus :: Maybe [Status] -> Request -> m Response` and `throwClientError :: ClientError -> m a`.
+Create `test/TypeSafe/Conformance/OperationsTest.hs`. It defines a test-only capturing monad and a `RunClient` instance for it. `RunClient` is the class in `servant-client-core`'s `Servant.Client.Core.RunClient` that servant uses to perform a request: its methods are `runRequestAcceptStatus :: Maybe [Status] -> Request -> m Response` and `throwClientError :: ClientError -> m a`.
 
 ```haskell
 -- | Records every request the servant client makes and answers it with a
@@ -447,7 +452,7 @@ instance RunClient Capture where
 
 Write the `Functor`, `Applicative` and `Monad` instances by hand. `Request` and `Response` here are `Servant.Client.Core.Request`/`Response`. Their fields, such as `requestMethod` and `requestPath`, are ordinary selector functions defined in servant-client-core, so this module can apply them even though the project turns selectors off for its own records.
 
-Obtain the client functions as a record with `genericClient @Routes @Capture`, imported from `Servant.Client.Generic` in servant-client-core (0.20.3; `Servant/Client/Generic.hs`). This is the same derivation EP-4's `makeMethods` uses through `genericClientHoist`. Read each route by selector application, which `TypeSafe.V1` makes possible by enabling `FieldSelectors`, for example `V1.systemOne client` and `V1.models client` with `import TypeSafe.V1 qualified as V1`. Do not use record dot syntax on `client`: a `NamedRoutes` field's type is a `(:-)` type-family application that `HasField` cannot see through, so `client.systemOne` does not typecheck. Do not destructure a `:<|>` chain either, because there is none.
+Obtain the client functions as a record with `genericClient @Routes @Capture`, imported from `Servant.Client.Generic` in servant-client-core (0.20.3; `Servant/Client/Generic.hs`). This is the same derivation EP-4's `makeMethods` uses through `genericClientHoist`. Read each route with record dot syntax, for example `client.systemOne` and `client.models`: a `NamedRoutes` field's type is a `(:-)` type-family application, and `HasField` resolves it once the mode is `AsClientT Capture`. Do not destructure a `:<|>` chain, because there is none.
 
 Call each operation once with a token, both danger-zone headers set, and a request value: the `noul` request example decoded in Milestone 3. The canned response bodies are the operation's own `200` examples, `noul` for `POST /v1/systemone`. For `GET /v1/models`, which has no response example, use a hand-written body that validates against `ModelMetadataList`.
 
@@ -564,23 +569,26 @@ A deliberate break used to observe a failing test must be reverted before commit
 **Files this plan creates and owns:**
 
 - `test/TypeSafe/Conformance/JsonSchema.hs`;
-- `test/TypeSafe/Conformance/Spec.hs`, which contains the binding table and the property-to-field table and is the single place the field-naming convention is checked;
-- `test/TypeSafe/Conformance/Operations.hs`;
+- `test/TypeSafe/Conformance/SchemaTest.hs`, which contains the binding table and the property-to-field table and is the single place the field-naming convention is checked;
+- `test/TypeSafe/Conformance/OperationsTest.hs`;
 - `test/TypeSafe/Test/Arbitrary.hs`. Other plans may import these generators but do not redefine them.
 
 **Files this plan edits:**
 
-- `test/Main.hs`, to register `Conformance.tests` and to load the document with the `TYPESAFE_OPENAPI_SPEC` override;
-- the `test-suite typesafe-hs-test` stanza of `typesafe-hs.cabal`, for `other-modules`, `-Werror=incomplete-patterns` and the dependencies;
+- `test/Main.hs`, to register `TypeSafe.Conformance.SchemaTest.tests` and to load the document with the `TYPESAFE_OPENAPI_SPEC` override;
+- the `test-suite typesafe-hs-test` stanza of `typesafe-hs.cabal`, for `other-modules` and the dependencies;
+- the `package typesafe-hs` stanza of `cabal.project`, where `-Werror=incomplete-patterns` joins EP-1's development-only flags; it never goes into the `.cabal` file, which EP-6's `cabal check` acceptance requires to carry no `-Werror`;
 - `extra-source-files`, for `spec/openapi.json`, if it is missing.
 
 **Test-suite dependencies added:** `QuickCheck`, `tasty-quickcheck`, `tasty-hunit` (if absent) and `servant-client-core`, plus `http-types`, `scientific`, `vector`, `containers`, `text`, `bytestring` and `aeson` where not already listed. Keep the bounds compatible with the library's R12 bounds in [docs/initial-spec.md](../initial-spec.md), for example `QuickCheck >=2.14 && <2.19` and `tasty-quickcheck >=0.10 && <0.12`, and verify them against the resolved build plan.
 
 **Library code is never changed by this plan.** A codec defect found here is fixed in the owning module of EP-2 or EP-3 and noted in Surprises & Discoveries.
 
-**Dropping an exclusion.** When [docs/plans/7-send-images-with-multipart-system-one-requests.md](7-send-images-with-multipart-system-one-requests.md) binds the multipart body, it removes the single entry of `excludedContentTypes` in `test/TypeSafe/Conformance/Spec.hs` and extends Milestone 4's capture checks to the multipart request.
+**Dropping an exclusion.** When [docs/plans/7-send-images-with-multipart-system-one-requests.md](7-send-images-with-multipart-system-one-requests.md) binds the multipart body, it removes the single entry of `excludedContentTypes` in `test/TypeSafe/Conformance/SchemaTest.hs` and extends Milestone 4's capture checks to the multipart request.
 
 
 ## Revision Notes
 
 - 2026-10-21: aligned with the MasterPlan's haskell-jitsurei change set. Operation binding now derives the client record with `genericClient @Routes @Capture` against EP-4's `NamedRoutes` API, and reads routes by selector application instead of `clientIn` and `:<|>`. The generators and field table follow `Int` token counts and location indices and the omitted-when-empty `assets` map. The field-table getters are confirmed to work under `NoFieldSelectors`. `Capture` became a positional newtype. The test-module style rules (explicit deriving strategies, postpositive imports, `MultilineStrings`) are stated. The decision is recorded in the Decision Log.
+
+- 2026-10-22: applied the MasterPlan review. `-Werror=incomplete-patterns` moves to `cabal.project`, routes in the operation-binding milestone are read with record dot syntax now that it is verified to resolve `NamedRoutes` fields, `TypeSafe.V1` is no longer described as re-enabling `FieldSelectors`, and the test modules are `TypeSafe.Conformance.SchemaTest` and `TypeSafe.Conformance.OperationsTest`.

@@ -17,6 +17,11 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:32:09Z
+      mode: "update"
+      note: "ADR 0005 spec drops the FieldSelectors exception; cabal.project named as the only home for -Werror flags"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -246,7 +251,7 @@ This milestone creates five files. The exact exports are under Interfaces and De
      ghc-options: -Werror=missing-fields -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-deriving-strategies -Wredundant-constraints
    ```
 
-   These flags do not go in `typesafe-hs.cabal`. A `-Werror` flag in a published `.cabal` file makes `cabal check` complain, and turns a new warning in a future GHC into a build failure for Hackage users. `-Wmissing-deriving-strategies` enforces the jitsurei rule that every deriving clause names its strategy. `nix build` reads only the `.cabal` file, so under Nix these flags are simply absent.
+   These flags do not go in `typesafe-hs.cabal`. A `-Werror` flag in a published `.cabal` file makes `cabal check` complain, and turns a new warning in a future GHC into a build failure for Hackage users. `-Wmissing-deriving-strategies` enforces the jitsurei rule that every deriving clause names its strategy. `nix build` reads only the `.cabal` file, so under Nix these flags are simply absent. A later plan that needs another `-Werror=` flag adds it to this stanza, never to `typesafe-hs.cabal`; EP-5 adds `-Werror=incomplete-patterns` here.
 3. **`src/TypeSafe/Wire/Common.hs`:** the primitives. `Content`'s instances are written by hand:
    - `toJSON` maps each constructor to the corresponding `Value`.
    - `toEncoding` uses `toEncoding` on the underlying `Text`, `Object` or `Array`.
@@ -314,7 +319,7 @@ Write six files:
   - **Adopted from servant-routes, by EP-4:**
     - `NamedRoutes` instead of a positional `:<|>` chain;
     - the auth header on each route field;
-    - `FieldSelectors` re-enabled in `TypeSafe.V1`, because record dot syntax cannot see through `NamedRoutes` fields.
+    - route fields read with record dot syntax like every other record, because `HasField` resolves a `NamedRoutes` field's `(:-)` type once the mode is concrete (verified on 2026-10-21 with GHC 9.12.4 and servant 0.20.3.0); no module re-enables `FieldSelectors`.
   - **Declined, each with its reason:**
     - *`MultiVerb` with declared error statuses.* R1 requires failures to surface as servant-client's unmodified `ClientError`, and the server's status set is not ours to declare: 400, 401 and 429 are observed but undocumented.
     - *A custom `TypeSafe.Prelude`.* It would add public surface to a roughly six-module Hackage package, and its lens re-export exceeds R1's dependency list.
@@ -520,7 +525,7 @@ Every later module inherits the common stanza: `GHC2024` with `DeriveAnyClass`, 
 - write postpositive qualified imports;
 - construct records rather than using record update syntax on wire types.
 
-`TypeSafe.V1` (EP-4) is the one module that re-enables `FieldSelectors`, with a module pragma, for its `NamedRoutes` record.
+No module re-enables `FieldSelectors`; `TypeSafe.V1` (EP-4) reads its `NamedRoutes` record with record dot syntax like any other record.
 
 Library dependencies after this plan are `aeson ^>=2.2`, `base >=4.20 && <5`, `http-types ^>=0.12` and `text ^>=2.1`, all from R12. The test suite also uses `bytestring`, `vector`, `tasty` and `tasty-hunit`, and enables `MultilineStrings`.
 
@@ -531,7 +536,7 @@ The shared files this plan creates, and how later plans extend them, are listed 
 - **`test/Main.hs`:** each later plan adds one tasty group.
 - **`spec/openapi.json`:** no other plan edits it; drift is a decision for the MasterPlan.
 - **`docs/adr/`:** later plans update a record when they change its decision, and add new records numbered from `0006`.
-- **`cabal.project`:** its `package typesafe-hs` stanza holds the development-only warning flags; EP-6 confirms none of them leak into `typesafe-hs.cabal`.
+- **`cabal.project`:** its `package typesafe-hs` stanza holds the development-only warning flags, to which EP-5 adds `-Werror=incomplete-patterns`; EP-6 confirms none of them leak into `typesafe-hs.cabal`.
 
 
 Revision note (2026-10-21): aligned the plan with the haskell-jitsurei conventions (`mori://shinzui/haskell-jitsurei/docs/core-standards`, `mori://shinzui/haskell-jitsurei/docs/core-record-patterns`) and the idiom review of the planned API:
@@ -541,3 +546,5 @@ Revision note (2026-10-21): aligned the plan with the haskell-jitsurei conventio
 - **ADRs.** ADR 0003 now covers `Generic`, `NoFieldSelectors` and `Int` counts, and ADR 0005 is added for the adopted and declined jitsurei patterns.
 
 The change avoids exporting selector functions that clash with common names, lets consumers use generic-lens on the wire types, and matches the conventions of the owner's other Haskell projects.
+
+Revision note (2026-10-22): after the MasterPlan review, ADR 0005's servant-routes bullet no longer records a `FieldSelectors` exception for `TypeSafe.V1`, because record dot syntax was verified to resolve `NamedRoutes` fields, and the `cabal.project` stanza is named as the only home for `-Werror=` flags, including EP-5's `-Werror=incomplete-patterns`.

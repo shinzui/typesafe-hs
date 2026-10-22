@@ -17,6 +17,11 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:32:09Z
+      mode: "update"
+      note: "Golden files listed under extra-source-files"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -221,7 +226,7 @@ Create the two golden files this plan owns:
 {"model":"jev-latest","state":{"ticket":"Checkout is unavailable."},"questions":{"urgent":{"type":"noul","instructions":"Is service blocked?"},"category":{"type":"choice","instructions":"Classify the issue.","criteria":{"billing":"Payment issue","technical":"Product malfunction"}},"severity":{"type":"score","instructions":"Rate impact.","criteria":["Minor","Disruptive","Blocking"]}}}
 ```
 
-Write it with `printf '%s' '…' > test/golden/baikai-request.bytes`, so that no newline is appended. The repository's treefmt formatters (fourmolu, cabal-gild, nixpkgs-fmt) do not touch `.bytes` or `.json` files.
+Write it with `printf '%s' '…' > test/golden/baikai-request.bytes`, so that no newline is appended. List both golden files under `extra-source-files` in `typesafe-hs.cabal`, so that the source distribution carries them; EP-6 later collapses such entries to globs. The repository's treefmt formatters (fourmolu, cabal-gild, nixpkgs-fmt) do not touch `.bytes` or `.json` files.
 
 In the test module, build the fixture value in Haskell with record construction syntax, and read fields back with `OverloadedRecordDot` (for example `fixture.model`). That proves the plain field names work for a consumer under `NoFieldSelectors` (R2). Do not use record-update syntax: build each variant value afresh. Inline JSON inputs may use `MultilineStrings` (`"""` literals), which the test-suite stanza enables. The tests are:
 
@@ -410,3 +415,5 @@ Every type above gets hand-written `ToJSON` and `FromJSON` instances, never `der
 `src/TypeSafe/Wire.hs` adds `module TypeSafe.Wire.Request` to its export list. EP-4 consumes `SystemOneRequest`'s `ToJSON` instance in its servant `ReqBody '[JSON]`. EP-5 consumes all of these types and both codec directions, and binds the schema names `SystemOneRequest`, `Question`, `NoulQuestion`, `NoulCriteria`, `ChoiceQuestion`, `ScoreQuestion`, `BoxQuestion` and `Asset` to them.
 
 Revision note (2026-10-21): aligned with the parent MasterPlan's haskell-jitsurei change set. The plan now uses postpositive imports and explicit `deriving stock (Generic, Eq, Show)` on every type, adopts `NoFieldSelectors` with record-dot-only access in the tests, and changes `assets` to a plain `Map Text Asset` that is omitted when empty, with a new test. The Decision Log records each change, and the old `assets` entry is marked superseded.
+
+Revision note (2026-10-22): after the MasterPlan review, this plan now lists its two golden files under `extra-source-files`, matching the ownership rule in the MasterPlan's Integration Points.

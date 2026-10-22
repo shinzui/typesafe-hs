@@ -17,6 +17,11 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:32:09Z
+      mode: "update"
+      note: "Drop the FieldSelectors pragma and read routes with record dot; fix servant checkout paths and Mercury line range; note the run signature is load-bearing; rename test module to V1Test"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -83,12 +88,16 @@ This is EP-4 of [docs/masterplans/1-deliver-the-initial-typesafe-hs-client.md](.
   Rationale: this follows Rule 1 of `mori://shinzui/haskell-jitsurei/docs/api-servant-routes`. A record cannot silently misroute by position, and it grows additively: a new route is a new field. Its "Auth goes on the field, not the record" section puts auth on each route, so that a later public route cannot inherit it by accident. `cabal.project` makes `-Werror=missing-fields` fatal for local builds, so a server or client record missing a route field fails to compile instead of warning. The `Methods` record, `makeMethods :: ClientEnv -> Text -> Methods` and `getClientEnv` keep the Mercury shape that R1 and Baikai expect.
   Date: 2026-10-21
 
-- Decision: `src/TypeSafe/V1.hs` starts with `{-# LANGUAGE FieldSelectors #-}`, turning selectors back on in this module only, against the package-wide `NoFieldSelectors`.
+- Decision (superseded on 2026-10-22 by the entry below): `src/TypeSafe/V1.hs` starts with `{-# LANGUAGE FieldSelectors #-}`, turning selectors back on in this module only, against the package-wide `NoFieldSelectors`.
   Rationale: a `NamedRoutes` field's type is the type-family application `mode :- …`. `HasField`, and so `OverloadedRecordDot`, cannot see through it, so `client.systemOne` does not typecheck. Selector application, `systemOne client`, does. This is the pitfall in `mori://shinzui/haskell-jitsurei/docs/api-servant-routes`, "OverloadedRecordDot Does Not Work on Route Fields". The `Methods` and `DangerZone` field names (`createSystemOne`, `createSystemOneWith`, `listModels`, `images`, `longContext`) clash with nothing common, and they stay usable with record dot as well.
   Date: 2026-10-21
 
+- Decision: `src/TypeSafe/V1.hs` stays under the package-wide `NoFieldSelectors` and reads its `Routes` record with record dot syntax (`routes.systemOne`), like every other module.
+  Rationale: the superseded entry rested on haskell-jitsurei's claim that `HasField` cannot see through a `NamedRoutes` field's `(:-)` type family. That claim was refuted on 2026-10-21: on GHC 9.12.4 with servant 0.20.3.0 and servant-client 0.20.3.0, `routes.models "Bearer x"` and `routes.ping` typecheck under `NoFieldSelectors` with `OverloadedRecordDot` for `AsClientT IO`, `AsClientT ClientM` and a `RunClient m`-polymorphic record, and the jitsurei pattern was corrected on 2026-10-22. Dropping the pragma keeps the package uniform: no module exports selector functions, so `Methods` and `DangerZone` fields are read with record dot as well.
+  Date: 2026-10-22
+
 - Decision: add `servant-client-core >=0.20.3 && <0.22` to the library's `build-depends`, the same range servant-client 0.20.3.0 itself declares.
-  Rationale: `genericClientHoist` lives in `Servant.Client.Generic`, which belongs to servant-client-core. servant-client's `Servant.Client` re-exports `AsClientT`, but not `genericClient` or `genericClientHoist`, and servant-client has no `reexported-modules`. This was checked in the local servant checkout (`mori://haskell-servant/servant`, project-relative paths `servant-client/servant-client.cabal` and `servant-client/src/Servant/Client.hs`, artifact-level URI pending). servant-client already depends on servant-client-core, so this widens nothing that Baikai resolves. The alternative, `hoistClient (Proxy @API) run (client (Proxy @API))`, also yields a `Routes (AsClientT IO)` without the direct dependency. If EP-6's bounds review prefers fewer direct dependencies, switch to it; the behaviour is identical.
+  Rationale: `genericClientHoist` lives in `Servant.Client.Generic`, which belongs to servant-client-core. servant-client's `Servant.Client` re-exports `AsClientT`, but not `genericClient` or `genericClientHoist`, and servant-client has no `reexported-modules`. This was checked in the local servant checkout (`mori://haskell-servant/servant`, project-relative paths `servant/servant-client/servant-client.cabal` and `servant/servant-client/src/Servant/Client.hs`, artifact-level URI pending). servant-client already depends on servant-client-core, so this widens nothing that Baikai resolves. The alternative, `hoistClient (Proxy @API) run (client (Proxy @API))`, also yields a `Routes (AsClientT IO)` without the direct dependency. If EP-6's bounds review prefers fewer direct dependencies, switch to it; the behaviour is identical.
   Date: 2026-10-21
 
 - Decision: terminal verbs stay plain `Post` and `Get`. They do not use `MultiVerb` with declared error statuses.
@@ -129,7 +138,7 @@ Some terms used throughout:
   - `ConnectionError SomeException`.
 
   `Response` has the fields `responseStatusCode`, `responseHeaders`, `responseHttpVersion` and `responseBody`; the body is a lazy `ByteString`.
-- **The JSON content type in servant:** in servant 0.20.x, `Servant.API.ContentTypes` defines it as `instance {-# OVERLAPPABLE #-} ToJSON a => MimeRender JSON a where mimeRender _ = encode`. That is why a body sent through servant uses the same `toEncoding` as `encodeSystemOneRequest`, and why no plan may define a custom `MimeRender JSON` instance for a wire type. The local servant checkout, located with `mori registry search servant-client`, is at version 0.20.3.0 for servant-client and 0.20.4.0 for servant.
+- **The JSON content type in servant:** in servant 0.20.x, `Servant.API.ContentTypes` defines it as `instance {-# OVERLAPPABLE #-} ToJSON a => MimeRender JSON a where mimeRender _ = encode`. That is why a body sent through servant uses the same `toEncoding` as `encodeSystemOneRequest`, and why no plan may define a custom `MimeRender JSON` instance for a wire type. The local servant checkout, located with `mori registry search servant-client`, is at version 0.20.3.0 for servant-client and 0.20.4.0 for servant. That checkout is ahead of Hackage, where servant, servant-client and servant-client-core were all 0.20.3.0 on 2026-10-21; bounds are taken from Hackage, never from the checkout.
 
 This plan builds on three earlier plans, all of which must be Complete before it starts.
 
@@ -159,7 +168,7 @@ This plan assumes those wire types derive `Generic`, `Eq` and `Show` with explic
 The shape to copy is the Mercury client packages:
 
 - `mori://MercuryTechnologies/claude`, project-relative path `src/Claude/V1.hs` (artifact-level URI pending; local checkout `/Users/shinzui/Keikaku/hub/haskell/claude-project/claude`):
-  - the `getClientEnv` definition (around lines 92 to 96);
+  - the `getClientEnv` definition (lines 92 to 104);
   - `makeMethodsWith`, which applies `Client.hoistClient @API Proxy run (Client.client @API Proxy)` to its header arguments and pattern-matches the resulting `:<|>` tree into record fields, where `run` calls `Client.runClientM` and rethrows `Left` with `Exception.throwIO`. This plan keeps the `run` idea but replaces the positional `:<|>` match with a `NamedRoutes` record (see Decision Log);
   - `type API = Header' [Required, Strict] "x-api-key" Text :> Header' [Optional, Strict] "anthropic-version" Text :> … :> "v1" :> (…)`.
 - `mori://MercuryTechnologies/openai`, project-relative path `src/OpenAI/V1.hs` (artifact-level URI pending; local checkout `/Users/shinzui/Keikaku/hub/haskell/openai-project/openai`):
@@ -187,7 +196,7 @@ Together they explain why `makeMethods` must rethrow `ClientError` unchanged.
 
 ## Plan of Work
 
-The work adds one library module, `src/TypeSafe/V1.hs`, and two test modules: `test/TypeSafe/Test/MockServer.hs`, the loopback server, and `test/TypeSafe/V1Spec.hs`, the tests. It edits `typesafe-hs.cabal` to list the new modules and their dependencies, and edits `test/Main.hs` to register the new test group. It touches no wire module. If a wire type turns out to need a change, for example a missing `Eq`, make that change in the owning module under its own plan's conventions, and note it here in Surprises & Discoveries.
+The work adds one library module, `src/TypeSafe/V1.hs`, and two test modules: `test/TypeSafe/Test/MockServer.hs`, the loopback server, and `test/TypeSafe/V1Test.hs`, the tests. It edits `typesafe-hs.cabal` to list the new modules and their dependencies, and edits `test/Main.hs` to register the new test group. It touches no wire module. If a wire type turns out to need a change, for example a missing `Eq`, make that change in the owning module under its own plan's conventions, and note it here in Surprises & Discoveries.
 
 
 ### Milestone 1 (EP-4 M1): the API type compiles in the library
@@ -199,16 +208,9 @@ Create `src/TypeSafe/V1.hs` and add `TypeSafe.V1` to `exposed-modules`. Add the 
 - `servant-client-core >=0.20.3 && <0.22`, for `Servant.Client.Generic`;
 - `http-client-tls`, and `http-client` only if needed.
 
-The module starts with `{-# LANGUAGE FieldSelectors #-}` and a comment explaining it (see Decision Log), and uses postpositive qualified imports. Define and export the endpoint types first, then the `Routes` record, then `API`:
+The module uses postpositive qualified imports and stays under the package-wide `NoFieldSelectors` like every other module (see Decision Log). Define and export the endpoint types first, then the `Routes` record, then `API`:
 
 ```haskell
-{-# LANGUAGE FieldSelectors #-}
-
--- FieldSelectors: record dot cannot see through a NamedRoutes field's
--- (mode :- …) type, so route fields are read by selector application
--- (haskell-jitsurei api/servant-routes, "OverloadedRecordDot Does Not Work
--- on Route Fields").
-
 -- | @POST /v1/systemone@. The two optional headers carry the only value the
 -- specification allows, @"true"@.
 type SystemOneEndpoint =
@@ -291,12 +293,12 @@ makeMethods clientEnv key = Methods {createSystemOne, createSystemOneWith, listM
     flag False = Nothing
 
     createSystemOneWith zone =
-      systemOne routes authorization (flag zone.images) (flag zone.longContext)
+      routes.systemOne authorization (flag zone.images) (flag zone.longContext)
     createSystemOne = createSystemOneWith noDangerZone
-    listModels = models routes authorization
+    listModels = routes.models authorization
 ```
 
-`systemOne routes` and `models routes` are selector applications, which is why the module enables `FieldSelectors`. The `Methods {createSystemOne, …}` construction uses field puns; if `NamedFieldPuns` is not on under `GHC2024`, add it as a per-module pragma or write the fields out (`Methods {createSystemOne = createSystemOne, …}`).
+`routes.systemOne` and `routes.models` are record dot reads of the `NamedRoutes` record: `HasField` resolves a route field's `(:-)` type once the mode is `AsClientT IO`. Keep the signature on `run`. `genericClientHoist` is polymorphic in its source monad, and a transformation whose body does not pin it, such as a test stub that ignores its argument, fails with an ambiguous `RunClient` constraint. The `Methods {createSystemOne, …}` construction uses field puns, which `GHC2024` includes through `NamedFieldPuns`.
 
 Nothing else wraps, catches or inspects the exception. Re-export `ClientEnv` and `ClientError (..)` from `Servant.Client`, so that consumers can name them without importing servant-client themselves.
 
@@ -342,7 +344,7 @@ Build the server with `Servant.Server.serve (Proxy @API) server`. Here `server :
 
 Wrap the application in a WAI middleware that captures the raw request before servant parses it. It reads the body fully with `Network.Wai.strictRequestBody`, stores a `Captured` value in an `IORef`, and re-supplies the same chunks to the inner application with `Network.Wai.setRequestBodyChunks`. If the local `wai` lacks `setRequestBodyChunks`, use the older `req { requestBody = … }` field. Run it with `Network.Wai.Handler.Warp.testWithApplication`.
 
-Create `test/TypeSafe/V1Spec.hs`, exporting `tests :: TestTree` named `"TypeSafe.V1"`, and register it in `test/Main.hs` the same way the other groups are registered. Each test builds its environment with `getClientEnv (Text.pack ("http://127.0.0.1:" <> show port))`, which also exercises `getClientEnv`; the TLS manager handles plain HTTP as well. It then uses `makeMethods env "test-key"`. The fixtures are loaded from the golden files rather than rebuilt by hand, so this plan does not depend on EP-2's or EP-3's test internals:
+Create `test/TypeSafe/V1Test.hs`, exporting `tests :: TestTree` named `"TypeSafe.V1"`, and register it in `test/Main.hs` the same way the other groups are registered. Each test builds its environment with `getClientEnv (Text.pack ("http://127.0.0.1:" <> show port))`, which also exercises `getClientEnv`; the TLS manager handles plain HTTP as well. It then uses `makeMethods env "test-key"`. The fixtures are loaded from the golden files rather than rebuilt by hand, so this plan does not depend on EP-2's or EP-3's test internals:
 
 - the request value is `eitherDecodeFileStrict "test/golden/baikai-request.json" :: IO (Either String SystemOneRequest)`;
 - the response value is decoded the same way from `test/golden/baikai-response.json`.
@@ -363,7 +365,7 @@ The milestone's tests are:
 
 ### Milestone 3: the remaining surface
 
-Add tests to `test/TypeSafe/V1Spec.hs`:
+Add tests to `test/TypeSafe/V1Test.hs`:
 
 - `createSystemOneWith (DangerZone {images = True, longContext = False}) request` sends the header `TypeSafe-Danger-Zone-Images: true` and no long-context header.
 - `createSystemOne` sends neither danger-zone header.
@@ -474,7 +476,7 @@ If the solver cannot satisfy `servant-server` or `warp` alongside R12's bounds o
 
 **Produces.** The module `TypeSafe.V1`, exporting:
 
-- `API` (`NamedRoutes Routes`), `Routes (..)` (fields `systemOne` and `models`, with selector functions, since the module enables `FieldSelectors`), `SystemOneEndpoint` and `ModelsEndpoint`. These are EP-4 M1's output, and [docs/plans/5-prove-conformance-with-the-vendored-openapi-document.md](5-prove-conformance-with-the-vendored-openapi-document.md) consumes them.
+- `API` (`NamedRoutes Routes`), `Routes (..)` (fields `systemOne` and `models`, read with record dot syntax under the package-wide `NoFieldSelectors`), `SystemOneEndpoint` and `ModelsEndpoint`. These are EP-4 M1's output, and [docs/plans/5-prove-conformance-with-the-vendored-openapi-document.md](5-prove-conformance-with-the-vendored-openapi-document.md) consumes them.
 - `Methods (..)`, with fields `createSystemOne`, `createSystemOneWith` and `listModels`.
 - `DangerZone (..)`, with fields `images` and `longContext`, and `noDangerZone`.
 - `getClientEnv :: Text -> IO ClientEnv` and `makeMethods :: ClientEnv -> Text -> Methods`.
@@ -511,3 +513,5 @@ Revision note (2026-10-21): aligned with haskell-jitsurei's core standards and s
 - `TypeSafe.V1` re-enables `FieldSelectors`, and `servant-client-core` was added as a dependency.
 - `MultiVerb` is declined under R1.
 - Deriving strategies are explicit and qualified imports are postpositive.
+
+Revision note (2026-10-22): after the MasterPlan review, `TypeSafe.V1` no longer re-enables `FieldSelectors`; route fields are read with record dot syntax, which was verified to work, and the earlier decision is marked superseded. The servant checkout paths now include the `servant/` directory, the checkout is noted as ahead of Hackage, the Mercury line range is corrected, the `run` signature is flagged as load-bearing for `genericClientHoist`, and the test module is `TypeSafe.V1Test`.

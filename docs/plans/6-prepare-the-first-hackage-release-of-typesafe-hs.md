@@ -17,6 +17,11 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:32:09Z
+      mode: "update"
+      note: "Correct the servant-client-core Hackage fact; condition http-client like servant-client-core; V1 no longer re-enables FieldSelectors"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -104,7 +109,7 @@ This repository, `/Users/shinzui/Keikaku/bokuno/typesafe-hs` (registered in Mori
   - `TypeSafe.Wire.Models`: `ModelMetadataList`, `ModelMetadata`, and a helper that parses the release day.
   - `TypeSafe.Wire.Error`: `ErrorBody`, `HTTPValidationError`, `ValidationError`, `LocationSegment` (whose index holds an `Int`) and `parseErrorBody`.
 - Every exported wire type derives `Generic`, `Eq` and `Show` with explicit `deriving stock` or `deriving newtype` clauses. Because the common stanza enables `NoFieldSelectors`, the package exports no field selector functions. Consumers read fields with record dot syntax (`response.usage.inputTokens`), or with generic-lens `#label` access in their own code.
-- `src/TypeSafe/V1.hs`, which enables `FieldSelectors` for itself. It exports:
+- `src/TypeSafe/V1.hs`, under the package-wide `NoFieldSelectors` like every other module. It exports:
   - the servant routes as a `NamedRoutes` record: `data Routes mode = Routes { systemOne, models }` with `type API = NamedRoutes Routes`, plus the endpoint synonyms `SystemOneEndpoint` and `ModelsEndpoint`;
   - the `Methods` record (`createSystemOne`, a variant that sets the danger-zone headers, and `listModels`);
   - `getClientEnv :: Text -> IO ClientEnv` and `makeMethods :: ClientEnv -> Text -> Methods`.
@@ -136,7 +141,7 @@ If any of these items are missing, the prerequisite plans are not complete. Stop
 **Facts checked on 2026-10-21, to be re-checked in Milestone 2:**
 
 - Baikai's Cabal files (`/Users/shinzui/Keikaku/bokuno/baikai/*/*.cabal`) declare `tested-with: ghc ==9.12.4` and these bounds: `aeson ^>=2.2`, `base >=4.20 && <5`, `bytestring ^>=0.12`, `containers ^>=0.7`, `scientific ^>=0.3`, `text ^>=2.1`, `vector ^>=0.13`, `http-types ^>=0.12`, `servant-client ^>=0.20`, `http-client ^>=0.7`, `http-client-tls >=0.3 && <0.5` and `time ^>=1.14`. Baikai declares no direct `servant` bound.
-- Hackage's newest versions were `servant` 0.20.3.0, `servant-client` 0.20.3.0, `http-client` 0.7.19 and `http-client-tls` 0.4.0.
+- Hackage's newest versions were `servant` 0.20.3.0, `servant-client` 0.20.3.0, `servant-client-core` 0.20.3.0, `http-client` 0.7.19 and `http-client-tls` 0.4.0. The local servant checkout registered in Mori is ahead of Hackage (servant 0.20.4.0, servant-client-core and servant-server 0.21.0.0, all unreleased), so query Hackage, never the checkout, for bounds.
 - `https://hackage.haskell.org/package/typesafe-hs` returned HTTP 404, so the name was free.
 
 
@@ -179,7 +184,7 @@ At the end of Milestone 1, `cabal check` is clean, `cabal test` passes (includin
 
 **Milestone 2: prove the candidate as a consumer will use it.**
 
-1. **Run the final bounds review.** Re-run the Hackage version queries and re-read Baikai's bounds (commands below). Include `servant-client-core` in the review only if `typesafe-hs.cabal`'s library stanza names it directly. Plan 4 adds it only if `TypeSafe.V1` imports from it. For every library dependency, confirm that our interval intersects Baikai's and includes the newest Hackage release in the same major version. Record the reviewed table in the Decision Log. If Baikai's bounds changed, follow Baikai.
+1. **Run the final bounds review.** Re-run the Hackage version queries and re-read Baikai's bounds (commands below). Include `servant-client-core` in the review only if `typesafe-hs.cabal`'s library stanza names it directly. Plan 4 adds it only if `TypeSafe.V1` imports from it. `http-client` is reviewed on the same condition. For every library dependency, confirm that our interval intersects Baikai's and includes the newest Hackage release in the same major version. Record the reviewed table in the Decision Log. If Baikai's bounds changed, follow Baikai.
 2. **Build the tarball in isolation.** In a scratch directory outside the repository, create a `cabal.project` whose only package is the tarball, with `active-repositories: hackage.haskell.org` so that nothing resolves from this checkout. Add `constraints:` that mirror Baikai's bounds, then build and run the tests there.
 
    This is the producer/consumer check for the whole initiative. It reproduces Baikai's release gate without touching Baikai. The scratch `cabal.project` deliberately sets no `ghc-options`, so the build proves the package compiles without the repository's local `-Werror=missing-fields`.
@@ -229,7 +234,7 @@ The `tar` listing shows `typesafe-hs-0.1.0.0/spec/openapi.json`, every golden fi
 **Milestone 2.** First, the bounds review queries, from any directory:
 
 ```bash
-# add servant-client-core to this list only if typesafe-hs.cabal's library names it
+# add servant-client-core, and keep http-client, only if typesafe-hs.cabal's library names them
 for p in aeson servant servant-client http-client http-client-tls http-types scientific text vector containers bytestring time; do
   printf '%s: ' "$p"
   curl -fsS -H 'Accept: application/json' "https://hackage.haskell.org/package/$p/preferred" | jq -c '."normal-version"[:2]'
@@ -388,7 +393,7 @@ http-client-tls  >=0.3 && <0.5
 time             ^>=1.14
 ```
 
-If plan 4 also depends on `servant-client-core` directly, bound it `>=0.20.3 && <0.22`. That is the range `servant-client` 0.20.3.0 itself requires (its Cabal file says `servant-client-core >=0.20.3 && <0.22`), and Hackage's newest `servant-client-core` was 0.21.0.0 on 2026-10-21. Do not add the dependency only to review it.
+If plan 4 also depends on `servant-client-core` directly, bound it `>=0.20.3 && <0.22`. That is the range `servant-client` 0.20.3.0 itself requires (its Cabal file says `servant-client-core >=0.20.3 && <0.22`), and Hackage's newest `servant-client-core` was 0.20.3.0 on 2026-10-21, with 0.21.0.0 present only in the unreleased local checkout. Do not add the dependency only to review it. The same rule applies to the `http-client ^>=0.7` row above: keep it only if plan 4 named `http-client` directly.
 
 **Test-suite dependencies** do not constrain consumers, so they only need to resolve on Hackage and with GHC 9.12.4. They are `tasty` and its add-ons, `QuickCheck`, `servant-server`, `warp` and `wai`. Give them caret bounds at their current major versions.
 
@@ -407,3 +412,5 @@ category:    AI, Web
 **Tools:** `cabal` (cabal-install 3.12 or newer, from the dev shell), `curl` and `jq` for the Hackage queries, and Nix for `nix build` and `nix flake check`. Uploading needs a Hackage account with upload rights. The credentials belong to the user and are never written to the repository.
 
 Revision note (2026-10-21): aligned with the haskell-jitsurei change set and the API idiom review. The surface summary now reflects the `NamedRoutes` `Routes` record, `NoFieldSelectors` with record-dot access, `Int` token counts, `assets` as a plain `Map` and `Generic` on every wire type. Milestones 1 and 2 now check that `-Werror=missing-fields` lives only in `cabal.project`, the README documents field access, and `servant-client-core` is bounded `>=0.20.3 && <0.22` only if it is a direct dependency.
+
+Revision note (2026-10-22): after the MasterPlan review, the Hackage facts name servant-client-core 0.20.3.0 as the newest release and mark the local servant checkout as ahead of Hackage, `http-client` is reviewed on the same condition as `servant-client-core`, and `TypeSafe.V1` is no longer described as re-enabling `FieldSelectors`.

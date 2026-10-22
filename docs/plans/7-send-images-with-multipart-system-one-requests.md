@@ -15,6 +15,11 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:32:09Z
+      mode: "update"
+      note: "V1 no longer re-enables FieldSelectors; multipart route read with record dot; Test-suffixed module names"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -114,7 +119,7 @@ To see it working:
   - the multipart route field carries its own `Authorization` header, following jitsurei's "auth goes on the field, not the record";
   - the client is derived with `genericClientHoist`.
 
-  Rationale: the core package's common stanza already enables `NoFieldSelectors`, `DeriveAnyClass` and the rest of the jitsurei baseline, and new modules must match. `NoFieldSelectors` matters concretely here. Otherwise `ImagePart`'s `contentType` field would generate a selector that clashes with servant's `Accept` class method `contentType`, which `TypeSafe.V1` uses for the `MultipartFormData` instance. `TypeSafe.V1` turns `FieldSelectors` back on only because `NamedRoutes` fields need selector application.
+  Rationale: the core package's common stanza already enables `NoFieldSelectors`, `DeriveAnyClass` and the rest of the jitsurei baseline, and new modules must match. `NoFieldSelectors` matters concretely here. Otherwise `ImagePart`'s `contentType` field would generate a selector that clashes with servant's `Accept` class method `contentType`, which `TypeSafe.V1` uses for the `MultipartFormData` instance. `TypeSafe.V1` stays under `NoFieldSelectors` too: record dot syntax resolves `NamedRoutes` fields, verified on 2026-10-21 with GHC 9.12.4 and servant 0.20.3.0.
   Date: 2026-10-21
 
 
@@ -168,7 +173,7 @@ To see it working:
   - Qualified imports are postpositive (`import Data.Map.Strict qualified as Map`).
   - `-Werror=missing-fields` is set only in `cabal.project`.
 - **EP-3** owns `src/TypeSafe/Wire/Response.hs`, `src/TypeSafe/Wire/Models.hs` and `src/TypeSafe/Wire/Error.hs`. They provide `SystemOneResponse` with `AnswerBox` and `BoxAnswer`, and `parseErrorBody`.
-- **`src/TypeSafe/V1.hs`** (EP-4) holds the servant layer. It enables `{-# LANGUAGE FieldSelectors #-}` for itself, because record dot syntax cannot see through `NamedRoutes` fields. It provides:
+- **`src/TypeSafe/V1.hs`** (EP-4) holds the servant layer, under the package-wide `NoFieldSelectors` like every other module. It provides:
   - the routes as a `NamedRoutes` record rather than a positional `:<|>` chain: `data Routes mode = Routes { systemOne :: mode :- SystemOneEndpoint, models :: mode :- ModelsEndpoint }` and `type API = NamedRoutes Routes`;
   - on each endpoint synonym, its own required strict `Authorization` header, then `"v1"` and the path;
   - optional danger-zone headers on `SystemOneEndpoint`;
@@ -262,7 +267,7 @@ data MultipartProblem
 
 **Building the body.** Use `Data.ByteString.Builder`. Never go through an intermediate `Value`, so that the JSON part is byte-equal to the JSON-body encoding.
 
-**Tests.** Add `test/TypeSafe/Wire/MultipartSpec.hs` as a tasty group registered in `test/Main.hs`. It has three kinds of test.
+**Tests.** Add `test/TypeSafe/Wire/MultipartTest.hs` as a tasty group registered in `test/Main.hs`. It has three kinds of test.
 
 - **A golden test.** Build a request with:
   - model `jev-preview`;
@@ -310,7 +315,7 @@ data MultipartRoutes mode = MultipartRoutes
 type MultipartAPI = NamedRoutes MultipartRoutes
 ```
 
-Mirror `SystemOneEndpoint`'s header order exactly, so the two endpoints differ only in the images header being required and in the request content type. Re-read `TypeSafe.V1` first; if EP-4's order differs from the one shown here, follow EP-4. Derive the client the way `makeMethods` does, with `Servant.Client.Generic.genericClientHoist`, and read the field with selector application (`systemOneMultipart client`), because `TypeSafe.V1` has `FieldSelectors` on.
+Mirror `SystemOneEndpoint`'s header order exactly, so the two endpoints differ only in the images header being required and in the request content type. Re-read `TypeSafe.V1` first; if EP-4's order differs from the one shown here, follow EP-4. Derive the client the way `makeMethods` does, with `Servant.Client.Generic.genericClientHoist` and a `run` function that carries its own signature, and read the field with record dot syntax (`client.systemOneMultipart`), as `makeMethods` reads `routes.systemOne`.
 
 The long-context header should be modelled the way EP-4 modelled it for the JSON endpoint, so re-read `TypeSafe.V1` first. Images are always present in a multipart request, so the images header is always sent as `"true"`.
 
@@ -324,7 +329,7 @@ Its second argument is the API token, sent as `Bearer <token>` exactly as `makeM
 
 If EP-4 exposed the danger-zone flags as a record argument, accept the same record here and ignore its images flag. Otherwise, take `Bool` for long context. Pick whichever matches the existing style, and log the choice.
 
-**Tests.** Extend `test/TypeSafe/Test/MockServer.hs`, or add a sibling, to serve `MultipartAPI` as a `MultipartRoutes (AsServerT Handler)` record, with a handler that records the raw body and headers and replies with the decoded `test/golden/baikai-response.json`. Then add a test to `test/TypeSafe/V1Spec.hs`, or whatever module EP-4 used, that calls `createSystemOneMultipart` against the loopback server. It asserts that:
+**Tests.** Extend `test/TypeSafe/Test/MockServer.hs`, or add a sibling, to serve `MultipartAPI` as a `MultipartRoutes (AsServerT Handler)` record, with a handler that records the raw body and headers and replies with the decoded `test/golden/baikai-response.json`. Then add a test to `test/TypeSafe/V1Test.hs`, or whatever module EP-4 used, that calls `createSystemOneMultipart` against the loopback server. It asserts that:
 
 - the captured body is byte-equal to `encodeMultipart` of the same value;
 - the captured `Content-Type` is `multipart/form-data; boundary=<defaultBoundary>`;
@@ -503,3 +508,5 @@ Revision note (2026-10-21): aligned with the initiative's haskell-jitsurei chang
 - The summary of prior deliverables now reflects EP-4's `NamedRoutes` `Routes` record, which replaces the positional `:<|>` chain, and `assets :: Map Text Asset`, omitted when empty.
 - It also reflects `NoFieldSelectors`, explicit deriving strategies and postpositive imports.
 - The multipart binding is now a separate `MultipartRoutes` record served as `NamedRoutes`, rather than a new `Routes` field, which keeps the release a minor 0.1.1.0 bump.
+
+Revision note (2026-10-22): after the MasterPlan review, `TypeSafe.V1` is no longer described as re-enabling `FieldSelectors`, the multipart route is read with record dot syntax, and the test modules follow the `Test` suffix (`TypeSafe.V1Test`, `TypeSafe.Wire.MultipartTest`).

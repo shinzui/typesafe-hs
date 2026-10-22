@@ -17,6 +17,11 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Apply haskell-jitsurei conventions: GHC2024 baseline, NoFieldSelectors, explicit Generic deriving, NamedRoutes, Int counts, plain assets Map"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:32:09Z
+      mode: "update"
+      note: "time bound ^>=1.14, explicit response key orders, Test-suffixed module names"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -90,8 +95,8 @@ This plan implements requirements R4, R5, R6, R9 and the response half of R11 fr
   Rationale: this form is not in the specification; it has only been observed, as `{"detail": {"error_type": "api_usage_error", "message": "Unknown model: x"}}`. `message` is what the official TypeScript SDK reads; `error_type` has been seen but is not guaranteed.
   Date: 2026-10-21
 
-- Decision: the library gains a dependency on `time`, with bound `time >=1.12 && <1.16`, for `releaseDay :: ModelMetadata -> Maybe Day`.
-  Rationale: R9 asks for "a helper to parse the day". `time` is a GHC boot package, and `servant-client` 0.20.3.0, which R1 already admits, depends on `time >=1.11 && <1.16` in its library stanza. Adding it therefore adds no package to any consumer's build plan, which satisfies R1's "plus whatever servant-client itself brings" and does not narrow R12's intersection with Baikai. This was verified on 2026-10-21 in the servant source registered in Mori as `haskell-servant/servant`, at `servant/servant-client/servant-client.cabal` line 102. EP-6 owns the final bounds review.
+- Decision: the library gains a dependency on `time`, with bound `time ^>=1.14`, for `releaseDay :: ModelMetadata -> Maybe Day`.
+  Rationale: R9 asks for "a helper to parse the day". `time` is a GHC boot package, and `servant-client` 0.20.3.0, which R1 already admits, depends on `time >=1.11 && <1.16` in its library stanza. Adding it therefore adds no package to any consumer's build plan, which satisfies R1's "plus whatever servant-client itself brings" and does not narrow R12's intersection with Baikai. The bound is copied from Baikai's own `time ^>=1.14`, as the MasterPlan's Decision Log of 2026-10-22 requires, so the intersection is exact. This was verified on 2026-10-21 in the servant source registered in Mori as `haskell-servant/servant`, at `servant/servant-client/servant-client.cabal` line 102. EP-6 owns the final bounds review.
   Date: 2026-10-21
 
 - Decision: `decodeSystemOneResponse :: Data.ByteString.Lazy.ByteString -> Either Text SystemOneResponse` reports aeson's error message as `Text`.
@@ -115,6 +120,20 @@ This plan implements requirements R4, R5, R6, R9 and the response half of R11 fr
   Rationale: `Generic` lets consumers that follow jitsurei's record pattern use generic-lens `#label` access without this library depending on `lens` or `generic-lens`, which R1 rules out. Without `NoFieldSelectors`, the fields `left`, `right`, `top`, `name`, `input`, `loc`, `msg`, `model`, `score` and `choice` would become exported top-level functions that clash with `Control.Arrow`, mtl and users' own names. R3 and R5 need exact, hand-controlled codecs, so generic aeson is declared out of scope. EP-1 records the adopted and declined jitsurei patterns in `docs/adr/0005-haskell-jitsurei-patterns-adopted-and-declined.md`.
   Date: 2026-10-21
 
+
+- Decision: response-side key orders are fixed by this plan rather than read from the document's `required` lists:
+  - `SystemOneResponse`: `model`, `answers`, `usage`;
+  - `NoulAnswer`: `type`, `noul`;
+  - `ChoiceAnswer`: `type`, `choice`, `confidence`, `probabilities`;
+  - `ScoreAnswer`: `type`, `score`, `confidence`, `legend`, `probabilities`;
+  - `BoxAnswer`: `type`, `box`, `confidence`;
+  - `BoxCoordinates`: `top`, `bottom`, `left`, `right`;
+  - `Usage`: `input_tokens`, `output_tokens`;
+  - `ModelMetadataList`: `models`; `ModelMetadata`: `name`, `description`, `release_date`;
+  - `HTTPValidationError`: `detail`; `ValidationError`: `loc`, `msg`, `type`, `input`, `ctx`; `ErrorDetail`: `error_type`, `message`.
+
+  Rationale: EP-2 found that the `required` lists differ between published copies of the document, and `jq -S .` sorts object keys but not arrays, so they are not a stable order source. R3 fixes request bytes only, but one declared order keeps EP-4's mock-server replies and EP-5's `toEncoding`/`toJSON` agreement checks easy to reason about.
+  Date: 2026-10-22
 
 ## Outcomes & Retrospective
 
@@ -224,7 +243,7 @@ Each type has the explicit clause `deriving stock (Generic, Eq, Show)`; never wr
 
 - **Unknown keys.** Decoders ignore unknown keys, for forward compatibility (R5).
 - **No semantic checks.** Decoders apply no semantic checks: a confidence of `1.5` or a negative token count decodes, because the schema allows it (R4).
-- **Hand-written `toEncoding`.** Each `ToJSON` instance has a hand-written `toEncoding` built with `Data.Aeson.Encoding.pairs`, emitting keys in the schema's `required` order with `type` first.
+- **Hand-written `toEncoding`.** Each `ToJSON` instance has a hand-written `toEncoding` built with `Data.Aeson.Encoding.pairs`, emitting keys in the fixed order recorded in the Decision Log, with `type` first on every answer.
 - **Agreement with `toJSON`.** The `toJSON` must agree with it structurally, meaning that `decode (encode x) :: Maybe Value` equals `Just (toJSON x)`.
 - **Why encoders exist.** The encoders exist because EP-4's mock server must send responses, and EP-5 checks that decoding inverts encoding for every schema.
 
@@ -273,7 +292,7 @@ Write the golden files:
 - `test/golden/baikai-response-missing-confidence.json`, the same file with `"confidence": 0.65` removed from `category`.
 - `test/golden/baikai-response-missing-score.json`, the same file with `"score": 1.5` removed from `severity`.
 
-Create `test/TypeSafe/Wire/ResponseTests.hs` with a subgroup `success bodies` whose tests assert:
+Create `test/TypeSafe/Wire/ResponseTest.hs` with a subgroup `success bodies` whose tests assert:
 
 - **The golden decodes** to a value equal to a hand-built `SystemOneResponse`, written with record construction syntax. Inspect individual fields with record dot syntax, for example `resp.usage.inputTokens`:
   - model `"jev-fixture-version"`;
@@ -320,7 +339,7 @@ Create `src/TypeSafe/Wire/Models.hs` with:
 
 `releaseDate` stays `Text` so that decoding never fails on an unusual date (R9). Add `time` to the library's `build-depends` with the bound recorded in the Decision Log.
 
-Add a subgroup `model listing` to `test/TypeSafe/Wire/ResponseTests.hs`, or to a sibling module `test/TypeSafe/Wire/ModelsTests.hs` registered under the same `Wire.Response` group. Its tests assert:
+Add a subgroup `model listing` to `test/TypeSafe/Wire/ResponseTest.hs`, or to a sibling module `test/TypeSafe/Wire/ModelsTest.hs` registered under the same `Wire.Response` group. Its tests assert:
 
 - **A real listing decodes.** This body decodes, ignoring `tags`, and `releaseDay` of its first model is `Just (fromGregorian 2026 9 15)`:
 
@@ -512,7 +531,7 @@ All steps are additive: new modules, new test modules, new golden files, and one
 - `vector ^>=0.13`: `Data.Vector`.
 - `text ^>=2.1`: `Data.Text` and `Data.Text.Encoding`.
 - `bytestring ^>=0.12`: `Data.ByteString.Lazy`.
-- `time >=1.12 && <1.16`: `Data.Time.Calendar` and `Data.Time.Format.ISO8601`.
+- `time ^>=1.14`: `Data.Time.Calendar` and `Data.Time.Format.ISO8601`.
 
 **Test dependencies.** `tasty` and `tasty-hunit` are already present from EP-1; add `scientific`, `containers`, `vector`, `bytestring`, `aeson` and `time` to the test suite if EP-1 did not.
 
@@ -594,3 +613,5 @@ Revision note (2026-10-21): aligned with the masterplan's haskell-jitsurei chang
 - `Usage` token counts and `LocationIndex` changed from `Integer` to `Int`, decoded by an `Int`-bounded parser that rejects non-integral and out-of-range values.
 
 The earlier `Int64`-to-`Integer` decision is kept and marked superseded.
+
+Revision note (2026-10-22): after the MasterPlan review, the `time` bound is Baikai's `^>=1.14`, the response-side key orders are stated explicitly in the Decision Log instead of pointing at the document's `required` lists, and the test modules carry the `Test` suffix the MasterPlan now prescribes.

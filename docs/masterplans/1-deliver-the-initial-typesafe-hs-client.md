@@ -16,6 +16,11 @@ provenance:
       at: 2026-10-21T18:07:26Z
       mode: "update"
       note: "Adopt haskell-jitsurei conventions and idiom-review changes across child plans; ADR 0005 records declined patterns"
+    - model: "claude-fable-5-1"
+      harness: "claude-code"
+      at: 2026-10-22T03:32:09Z
+      mode: "update"
+      note: "Apply the 2026-10-22 review: -Werror flags confined to cabal.project, FieldSelectors exception dropped after the record-dot premise was refuted, Integration Points gaps closed, test-module naming and time bound fixed"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -131,9 +136,9 @@ EP-1 ──┬──> EP-2 ──┬──> EP-4 ──────────�
 
 **`typesafe-hs.cabal` and `cabal.project`.**
 - *Plans:* all.
-- *Owner:* EP-1 defines the package: a common stanza with `GHC2024`; the haskell-jitsurei baseline extensions `DeriveAnyClass`, `DuplicateRecordFields`, `OverloadedLabels` and `OverloadedStrings`; this project's additions `NoFieldSelectors` and `OverloadedRecordDot`; and `-Wall`. `MultilineStrings` is on in the test suite only. `-Werror=missing-fields` is set in `cabal.project`, not in the `.cabal` file, so `cabal check` stays clean. The package itself has the `library`, with `hs-source-dirs: src`, and one `test-suite typesafe-hs-test` using `tasty`, with `hs-source-dirs: test` and `main-is: Main.hs`.
-- *Later plans:* add their modules to `exposed-modules` or `other-modules`, and add their dependencies to the right stanza.
-- *Bounds:* library bounds must stay inside R12's list. A new library dependency must also be justified in that plan's Decision Log. EP-4 is expected to add `http-client-tls >=0.3 && <0.5`, and `http-client ^>=0.7` only if it is named directly. It also adds `servant-client-core >=0.20.3 && <0.22`, matching servant-client 0.20.3.0's own bound, because `Servant.Client.Generic` (`genericClientHoist`) is not re-exported by servant-client. EP-3 is expected to add `time`, a GHC boot package and already a dependency of servant-client 0.20.3.0. Both ranges intersect Baikai's own Cabal files, which declare `http-client-tls >=0.3 && <0.5` and `time ^>=1.14`. EP-6 owns the final bounds review.
+- *Owner:* EP-1 defines the package: a common stanza with `GHC2024`; the haskell-jitsurei baseline extensions `DeriveAnyClass`, `DuplicateRecordFields`, `OverloadedLabels` and `OverloadedStrings`; this project's additions `NoFieldSelectors` and `OverloadedRecordDot`; and `-Wall`. `MultilineStrings` is on in the test suite only. Every `-Werror=` flag lives in the `package typesafe-hs` stanza of `cabal.project`, which covers the library and the test suite alike, and never in the `.cabal` file, so `cabal check` stays clean. EP-1 sets `-Werror=missing-fields` there and EP-5 adds `-Werror=incomplete-patterns` there. The package itself has the `library`, with `hs-source-dirs: src`, and one `test-suite typesafe-hs-test` using `tasty`, with `hs-source-dirs: test` and `main-is: Main.hs`.
+- *Later plans:* add their modules to `exposed-modules` or `other-modules`, and add their dependencies to the right stanza. A plan that owns golden files adds them to `extra-source-files` in the same change (EP-2, EP-3 and EP-4); EP-6 collapses the entries to globs and checks that the source distribution carries them.
+- *Bounds:* library bounds must stay inside R12's list. A new library dependency must also be justified in that plan's Decision Log. EP-4 is expected to add `http-client-tls >=0.3 && <0.5`, and `http-client ^>=0.7` only if it is named directly. It also adds `servant-client-core >=0.20.3 && <0.22`, matching servant-client 0.20.3.0's own bound, because `Servant.Client.Generic` (`genericClientHoist`) is not re-exported by servant-client. EP-3 is expected to add `time ^>=1.14`, a GHC boot package and already a dependency of servant-client 0.20.3.0. Both ranges are copied from Baikai's own Cabal files, which declare `http-client-tls >=0.3 && <0.5` and `time ^>=1.14`. EP-6 owns the final bounds review.
 
 **`src/TypeSafe/Wire.hs`, the umbrella module.**
 - *Plans:* EP-1, EP-2, EP-3.
@@ -155,7 +160,7 @@ EP-1 ──┬──> EP-2 ──┬──> EP-4 ──────────�
 - *Field names:* a field takes the property's name verbatim. Snake-case names become lower camel case (`input_tokens` becomes `inputTokens`, `release_date` becomes `releaseDate`, `data_base64` becomes `dataBase64`). The reserved word `type` becomes `type_` where it is a real field, on `ValidationError`.
 - *Tags:* the discriminator `type` on questions and answers is implied by the constructor and is never a field. Each variant record (`NoulQuestion`, `ChoiceAnswer`, and so on) still owns its tag in both directions: its own encoder writes `"type"`, and its own decoder requires it, because each variant schema lists `type` as required. The `Question` and `Answer` sums only dispatch. The constant `type` on `Asset` is implied by the type, written on encode and accepted when absent or equal to `"image"` on decode.
 - *Instances and optionality:* every wire type has `deriving stock (Generic, Eq, Show)`. Every deriving clause names its strategy, which is required because `DeriveAnyClass` is on. EP-4 and EP-5 rely on `Eq` and `Show`. `Generic` lets consumers use generic-lens `#label` access without the library depending on lens. A property the document leaves optional is a `Maybe` field. Two non-obvious cases are `HTTPValidationError.detail` and every `Asset` field, including its constant `type`.
-- *Field access:* `NoFieldSelectors` is on, so no top-level selector functions are generated. Fields are read with record dot syntax or generic-lens. Library code constructs records and never uses record update syntax on wire types. Only `TypeSafe.V1` re-enables `FieldSelectors`, because record dot syntax cannot see through `NamedRoutes` fields.
+- *Field access:* `NoFieldSelectors` is on, so no top-level selector functions are generated. Fields are read with record dot syntax or generic-lens. Library code constructs records and never uses record update syntax on wire types. No module re-enables `FieldSelectors`: record dot syntax also resolves `NamedRoutes` route fields such as `routes.systemOne`, verified on 2026-10-21 with GHC 9.12.4 and servant 0.20.3.0, so `TypeSafe.V1` reads its `Routes` record the same way (see Surprises & Discoveries).
 - *Numbers and collections:* token counts and validation-location indices are `Int`, and a non-integral or out-of-range value fails to decode. `SystemOneRequest.assets` is a plain `Map Text Asset`, omitted when empty.
 - *Imports:* qualified imports use the postpositive form (`import Data.Map.Strict qualified as Map`).
 - *Unknown keys:* unknown additional properties are ignored on decode.
@@ -173,7 +178,8 @@ EP-1 ──┬──> EP-2 ──┬──> EP-4 ──────────�
 - *Consumers:* EP-5 reads the document. The `apiSpecVersion` equality test is EP-1's; EP-5 does not duplicate it.
 
 **Test-suite helpers.**
-- *`test/Main.hs`:* EP-1 owns it. Each plan registers one tasty group there.
+- *`test/Main.hs`:* EP-1 owns it. Each plan registers one tasty group there. EP-5 is the one exception: it moves the loading of `spec/openapi.json` into a shared loader that honours the `TYPESAFE_OPENAPI_SPEC` override, and passes the loaded document to EP-1's version test as well as to its own group.
+- *Naming:* test modules end in `Test` (`TypeSafe.Wire.RequestTest`, `TypeSafe.V1Test`, `TypeSafe.Conformance.SchemaTest`), and each exports a `tests` value.
 - *`test/TypeSafe/Test/Arbitrary.hs`:* EP-5 owns the QuickCheck `Arbitrary` instances. EP-2 and EP-3 use hand-written values and golden files only, so they never need these instances.
 - *`test/TypeSafe/Test/MockServer.hs`:* EP-4 owns the loopback mock server, which is built from `TypeSafe.V1.API` with `servant-server` and `warp`.
 
@@ -197,7 +203,7 @@ EP-1 also records which haskell-jitsurei patterns were adopted and which were de
 
 ## Progress
 
-Not started as of 2026-10-21. All six child plans have been drafted; EP-1 is the only plan that can start. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
+Not started as of 2026-10-22. All six child plans have been drafted and reviewed, and the review's findings were applied the same day; EP-1 is the only plan that can start. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
 
 
 ## Surprises & Discoveries
@@ -224,6 +230,21 @@ Answer,Asset,BoxAnswer,BoxCoordinates,BoxQuestion,ChoiceAnswer,ChoiceQuestion,HT
 
 - **Not every observed error body is in the specification.** The official TypeScript SDK (local checkout `/Users/shinzui/Keikaku/hub/agents/typesafe-sdk-js`, v0.7.0, `src/errors.ts`) also parses `{"error": "…"}`, `{"error": {"message": …}}` and `{"message": …}`. It reports that 401 replies use the `error` form, and that an unknown model is a 400 with `{"detail": {"error_type": "api_usage_error", "message": "Unknown model: …"}}`. R6 only requires the `detail` forms, but EP-3 should know that the other forms will reach the raw-JSON fallback.
 
+
+- **Record dot syntax does resolve `NamedRoutes` route fields.** The haskell-jitsurei servant-routes pattern said `HasField` cannot see through a route field's `(:-)` type family, and EP-4, EP-5 and EP-7 had `TypeSafe.V1` re-enable `FieldSelectors` for that reason. A scratch project on GHC 9.12.4 with servant 0.20.3.0, servant-client 0.20.3.0, generic-lens 2.3.0.0 and lens 5.3.6 showed the claim is false: under `NoFieldSelectors` with `OverloadedRecordDot`, record dot, generic-lens labels and selector application all typecheck for `AsClientT IO`, `AsClientT ClientM` and a `RunClient m`-polymorphic record. The pattern document was corrected on 2026-10-22, and the plans now keep `TypeSafe.V1` under `NoFieldSelectors`. Evidence:
+
+```haskell
+routesIO :: Routes (AsClientT IO)
+routesIO = genericClientHoist run
+  where
+    run :: ClientM x -> IO x
+    run _ = fail "no network in this repro"
+
+listModels :: IO [Int]
+listModels = routesIO.models "Bearer test"   -- compiles and runs
+```
+
+  The one trap nearby: `genericClientHoist` leaves its source monad to the natural transformation's type, so a stub that ignores its argument needs the signature shown, while a body that applies `runClientM` pins the monad on its own.
 
 ## Decision Log
 
@@ -269,7 +290,20 @@ Answer,Asset,BoxAnswer,BoxCoordinates,BoxQuestion,ChoiceAnswer,ChoiceQuestion,HT
 - Decision: the multipart follow-up, [docs/plans/7-send-images-with-multipart-system-one-requests.md](../plans/7-send-images-with-multipart-system-one-requests.md), is a standalone ExecPlan with no `master_plan` link and no intention. Its prerequisite is that this whole MasterPlan is complete.
   Rationale: the user asked for the missing part to be planned now and implemented later. Registering it as a child would keep this initiative open until it is done. That plan's own Milestone 0 is a design decision the user must confirm, because it may change R1 and R12's dependency scope.
   Date: 2026-10-21
+- Decision: `TypeSafe.V1` stays under the package-wide `NoFieldSelectors` and reads its `Routes` record with record dot syntax; no module re-enables `FieldSelectors`.
+  Rationale: the exception rested on the haskell-jitsurei claim that record dot cannot see through `NamedRoutes` fields, which the review refuted (see Surprises & Discoveries). Without the exception the package exports no selector functions at all, so `Methods` and `DangerZone` are read like every wire type. EP-1's ADR 0005 specification, EP-4, EP-5, EP-6 and EP-7 were updated to match.
+  Date: 2026-10-22
+
+- Decision: every `-Werror=` flag lives in the `package typesafe-hs` stanza of `cabal.project`, never in `typesafe-hs.cabal`. EP-1 sets `-Werror=missing-fields` there and EP-5 adds `-Werror=incomplete-patterns` there.
+  Rationale: EP-5 had placed its flag in the test-suite stanza of the Cabal file, which EP-6's `cabal check` acceptance forbids. The `cabal.project` stanza already applies to the test suite, so nothing is lost.
+  Date: 2026-10-22
+
+- Decision: test modules carry a `Test` suffix (`TypeSafe.Wire.RequestTest`, `TypeSafe.V1Test`, `TypeSafe.Conformance.SchemaTest`, `TypeSafe.Conformance.OperationsTest`), and a library bound that Baikai also declares is copied from Baikai verbatim, so EP-3's `time` bound is `^>=1.14`.
+  Rationale: the review found four different suffixes across the plans and two `time` intervals; one convention each removes the drift before any file exists.
+  Date: 2026-10-22
 
 ## Outcomes & Retrospective
 
 (To be filled during and after implementation.)
+
+Revision note (2026-10-22): applied the findings of the 2026-10-22 review. `-Werror=` flags are confined to `cabal.project`; `TypeSafe.V1` no longer re-enables `FieldSelectors`, after the record-dot premise was refuted and the haskell-jitsurei pattern corrected; Integration Points now name the owners of `extra-source-files` entries, EP-5's shared document loader and the test-module naming convention; EP-3's `time` bound follows Baikai's. EP-6's Hackage facts and EP-4's servant checkout paths were corrected in the children.
