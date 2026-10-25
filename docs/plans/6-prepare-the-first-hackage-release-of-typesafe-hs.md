@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T03:32:09Z
       mode: "update"
       note: "Correct the servant-client-core Hackage fact; condition http-client like servant-client-core; V1 no longer re-enables FieldSelectors"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:50:52Z
+      mode: "implement"
+      note: "Prepare documented source distribution and isolated consumer validation"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -54,6 +59,8 @@ You can see it working in three ways:
 
 ## Progress
 
+Handoff (2026-10-24): all independent implementation, documentation and preliminary consumer checks are done. Milestones 1 and 2 remain open until the owner chooses the license/copyright holder and the final licensed tarball is checked. Milestone 3 awaits separate upload, publication and tag/push approvals. The license question is pending; do not choose a default.
+
 - [ ] Milestone 1: the package is release-shaped. That means a license the user chose, complete Cabal metadata, `README.md` and `CHANGELOG.md`, a README example that is compiled and checked by the test suite, and 100% Haddock coverage of every exposed module. `cabal check` reports no errors or warnings, and `cabal sdist` produces `typesafe-hs-0.1.0.0.tar.gz` containing `spec/openapi.json` and the golden files.
 - [ ] Milestone 2: the candidate is proven as a consumer will use it. The final bounds review is recorded. A scratch project outside the repository builds the tarball against Hackage only, with Baikai's bounds as constraints, and its test suite passes. `nix build` and `nix flake check` succeed in this repository.
 - [ ] Milestone 3: the package is published. With the user's confirmation at each step, the name is re-verified as free, a package candidate and its documentation are uploaded and reviewed, the release is published, and the tag `v0.1.0.0` is created and pushed. The user is given a short note for Baikai's maintainers.
@@ -61,10 +68,39 @@ You can see it working in three ways:
 
 ## Surprises & Discoveries
 
-(None yet.)
+Cabal 3.16 treats a local tarball package as global-style: `cabal test all` reported no project components. Building the explicit package target proceeds, but the test gate now extracts the exact tarball in the scratch directory and names that extracted package directory in cabal.project. This preserves Hackage-only resolution and proves the distribution contents without reading this checkout.
+
+
+The owner license question was asked asynchronously on 2026-10-24 and remains unanswered. No license is selected and no upload or tag is authorized. README/example work, metadata, bounds review and build preparation can proceed independently; Milestone 1 is not accepted until the owner chooses the license and copyright holder.
+
+
 
 
 ## Decision Log
+
+- Decision (2026-10-24): the final http-client-tls minimum is 0.3.5, superseding the copied >=0.3 lower bound. getClientEnv uses newTlsManagerWith, introduced in 0.3.5. This is verified in the released Hackage 0.3.5 source and upstream tag http-client-tls/0.3.5. It still intersects Baikai's >=0.3 && <0.5 interval. Source ownership: `mori://snoyberg/http-client/packages/http-client-tls`, project-relative path `http-client/http-client-tls/Network/HTTP/Client/TLS.hs` (artifact-level URI pending).
+
+Dependency registry and upstream tag checks on 2026-10-24 found these newest releases within the declared PVP major intervals (newer major lines are deliberately excluded):
+
+```text
+package              bound                     newest within bound
+aeson                ^>=2.2                    2.2.5.1
+base                 >=4.20 && <5              4.21.2.0 with GHC 9.12.4 (4.22.0.0 published for newer GHC)
+bytestring           ^>=0.12                   0.12.2.0
+containers           ^>=0.7                    0.7
+scientific           ^>=0.3                    0.3.10.0
+text                 ^>=2.1                    2.1.4
+vector               ^>=0.13                   0.13.2.0
+http-types           ^>=0.12                   0.12.6
+servant              >=0.20.3 && <0.21          0.20.3.0
+servant-client       ^>=0.20                   0.20.3.0
+servant-client-core  >=0.20.3 && <0.22           0.20.3.0
+http-client-tls      >=0.3.5 && <0.5            0.4.0
+time                 ^>=1.14                   1.14
+```
+
+Baikai's current Cabal bounds still match R12; read through `mori://shinzui/baikai/packages/baikai`. Hackage JSON/package metadata and upstream release tags were checked directly, including the three servant 0.20.3.0 tags, each resolving to e07e92abd62641fc0f199a33e5131de273140cb0. http-client is not a direct library dependency. Hackage returned 404 for typesafe-hs, so the name is presently available. The preliminary isolated consumer check passed with scientific 0.3.10.0 and http-types 0.12.6, beyond the older installed versions used during development.
+
 
 - Decision: the first release is version `0.1.0.0`, and its library dependency bounds are exactly the intervals listed under Interfaces and Dependencies, written with `^>=` where Baikai uses `^>=`.
   Rationale: under the Package Versioning Policy (PVP), Hackage's versioning convention, a major version has two components (`A.B`), so `0.1` is the first major version. The rest of the version is the minor and patch positions. Any bound that intersects Baikai's allows a joint build plan. Copying Baikai's own intervals is the simplest bound that always intersects and does not over-promise compatibility with untested majors.
@@ -88,7 +124,11 @@ You can see it working in three ways:
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Implementation and documentation are ready for owner licensing. The checkout passes 208 tests; all seven exposed modules report 100% Haddock coverage. The local documentation archive is `dist-newstyle/typesafe-hs-0.1.0.0-docs.tar.gz`; it has not been uploaded. The README drift mutation failed as intended and was restored. Nix build and flake checks passed. The normalized live specification still matches the approved baseline, and empty fetch bodies correctly fail the drift script with exit 2.
+
+A preliminary source distribution, including every fixture, README/example source and drift script, was extracted outside the checkout and passed all 208 tests with Hackage-only resolution, Baikai's bounds, scientific 0.3.10.0 and http-types 0.12.6. Its project contained no development warning flags or source-repository-package override. The scratch project is `/var/folders/xf/z_902qyd0dg5m6n8pjv1vk300000gn/T/typesafe-hs-unpacked-consumer-s2pfr1d3` for this session; the Concrete Steps reproduce it elsewhere.
+
+This is preliminary evidence, not release acceptance: `cabal check` reports only the missing license, and no copyright holder or license has been assumed. After the owner's answer, add LICENSE and the Cabal licensing fields, rebuild the source distribution, rerun the final tarball check and cabal check, then request candidate-upload approval. Nothing has been uploaded, tagged or pushed. ADR 0007 records this release gate.
 
 
 ## Context and Orientation
@@ -185,7 +225,7 @@ At the end of Milestone 1, `cabal check` is clean, `cabal test` passes (includin
 **Milestone 2: prove the candidate as a consumer will use it.**
 
 1. **Run the final bounds review.** Re-run the Hackage version queries and re-read Baikai's bounds (commands below). Include `servant-client-core` in the review only if `typesafe-hs.cabal`'s library stanza names it directly. Plan 4 adds it only if `TypeSafe.V1` imports from it. `http-client` is reviewed on the same condition. For every library dependency, confirm that our interval intersects Baikai's and includes the newest Hackage release in the same major version. Record the reviewed table in the Decision Log. If Baikai's bounds changed, follow Baikai.
-2. **Build the tarball in isolation.** In a scratch directory outside the repository, create a `cabal.project` whose only package is the tarball, with `active-repositories: hackage.haskell.org` so that nothing resolves from this checkout. Add `constraints:` that mirror Baikai's bounds, then build and run the tests there.
+2. **Build the tarball in isolation.** In a scratch directory outside the repository, create a `cabal.project` whose only package is the directory extracted from the tarball, with `active-repositories: hackage.haskell.org` so that nothing resolves from this checkout. Add `constraints:` that mirror Baikai's bounds, then build and run the tests there.
 
    This is the producer/consumer check for the whole initiative. It reproduces Baikai's release gate without touching Baikai. The scratch `cabal.project` deliberately sets no `ghc-options`, so the build proves the package compiles without the repository's local `-Werror=missing-fields`.
 3. **Check the Nix build.** Run `nix build` and `nix flake check` in the repository. `nix build` builds the package from nixpkgs' GHC 9.12.4 package set, and `nix flake check` runs the formatting and pre-commit checks configured in `nix/treefmt.nix` and `nix/pre-commit.nix`. If nixpkgs' `servant-client` falls outside our bounds, record it in Surprises & Discoveries. Fix it through `./flake.module.nix` (the unmanaged extension point; see `flake.module.nix.example`), never by editing `nix/haskell.nix`, which is managed by seihou, the project's template tool.
@@ -248,8 +288,9 @@ Next, the isolated consumer build. The scratch directory is the session scratchp
 SCRATCH="$(mktemp -d)/typesafe-hs-consumer"
 mkdir -p "$SCRATCH"
 cp /Users/shinzui/Keikaku/bokuno/typesafe-hs/dist-newstyle/sdist/typesafe-hs-0.1.0.0.tar.gz "$SCRATCH/"
+tar -xzf "$SCRATCH/typesafe-hs-0.1.0.0.tar.gz" -C "$SCRATCH"
 cat > "$SCRATCH/cabal.project" <<'EOF'
-packages: typesafe-hs-0.1.0.0.tar.gz
+packages: typesafe-hs-0.1.0.0
 active-repositories: hackage.haskell.org
 tests: True
 constraints:
@@ -389,7 +430,7 @@ http-types       ^>=0.12
 servant          ^>=0.20
 servant-client   ^>=0.20
 http-client      ^>=0.7
-http-client-tls  >=0.3 && <0.5
+http-client-tls  >=0.3.5 && <0.5
 time             ^>=1.14
 ```
 
@@ -414,3 +455,5 @@ category:    AI, Web
 Revision note (2026-10-21): aligned with the haskell-jitsurei change set and the API idiom review. The surface summary now reflects the `NamedRoutes` `Routes` record, `NoFieldSelectors` with record-dot access, `Int` token counts, `assets` as a plain `Map` and `Generic` on every wire type. Milestones 1 and 2 now check that `-Werror=missing-fields` lives only in `cabal.project`, the README documents field access, and `servant-client-core` is bounded `>=0.20.3 && <0.22` only if it is a direct dependency.
 
 Revision note (2026-10-22): after the MasterPlan review, the Hackage facts name servant-client-core 0.20.3.0 as the newest release and mark the local servant checkout as ahead of Hackage, `http-client` is reviewed on the same condition as `servant-client-core`, and `TypeSafe.V1` is no longer described as re-enabling `FieldSelectors`.
+
+Revision note (2026-10-24): implement the approved 21-schema surface, package a compiled README example, review current registry releases and upstream tags, and test extracted tarball contents because Cabal 3.16 does not select tests from global-style tarball targets. License selection and external release approvals remain pending.

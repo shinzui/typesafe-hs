@@ -96,7 +96,7 @@ You can see it working when `cabal test` prints its tests passing. They prove th
 
 ## Outcomes & Retrospective
 
-The foundation is complete. Cabal and Nix both pass 13 tests; REPL confirms the umbrella exports Content and Generic. Drift exits 0/1/2 and version mismatch, missing-file and corrupt-file failures were exercised and restored. The user approved the 21-schema baseline, whose content digest is recorded above. nix fmt normalized existing whitespace in nix/haskell.nix without changing behavior. ADR dates reflect implementation on 2026-10-24 rather than the original planned date.
+The foundation is complete. Cabal and Nix both pass 13 tests; REPL confirms the umbrella exports Content and Generic. The release pass additionally confirmed an empty upstream document exits 2 by using jq -e. Drift exits 0/1/2 and version mismatch, missing-file and corrupt-file failures were exercised and restored. The user approved the 21-schema baseline, whose content digest is recorded above. nix fmt normalized existing whitespace in nix/haskell.nix without changing behavior. ADR dates reflect implementation on 2026-10-24 rather than the original planned date.
 
 
 ## Context and Orientation
@@ -173,13 +173,13 @@ The types this plan defines (`Content` and the two newtypes) have no record fiel
 
 ### The OpenAPI document and its drift
 
-TypeSafe publishes its OpenAPI document at `https://api.typesafe.ai/openapi.json`. On 2026-10-21 that document had:
+TypeSafe publishes its OpenAPI document at `https://api.typesafe.ai/openapi.json`. On 2026-10-24 the approved document had:
 
 - `openapi` 3.1.0 and `info.version` `0.2.0`;
 - the paths `/v1/models` and `/v1/systemone`;
 - 21 component schemas (current approved baseline): `Answer`, `Asset`, `BoxAnswer`, `BoxCoordinates`, `BoxQuestion`, `ChoiceAnswer`, `ChoiceQuestion`, `HTTPBadRequestError`, `HTTPValidationError`, `ModelMetadata`, `ModelMetadataList`, `NoulAnswer`, `NoulCriteria`, `NoulQuestion`, `Question`, `ScoreAnswer`, `ScoreQuestion`, `SystemOneRequest`, `SystemOneResponse`, `Usage` and `ValidationError`.
 
-Once normalised with `jq -S .`, the copy fetched that day was a normalized SHA-256 of `14bfe394955d2f31dfb653a1b18dd561c8da4d12677915a10fcc8c62e0fcbcc3` (2026-10-24). `jq -S .` re-indents the JSON and sorts every object's keys, so the file is stable to diff.
+Once normalised with `jq -S .`, the copy fetched on 2026-10-24 has SHA-256 `14bfe394955d2f31dfb653a1b18dd561c8da4d12677915a10fcc8c62e0fcbcc3` (2026-10-24). `jq -S .` re-indents the JSON and sorts every object's keys, so the file is stable to diff.
 
 That document is a superset of the older copy `docs/initial-spec.md` was written against. The older copy is vendored by the community SDK at `mori://byteally/typesafe-sdk/packages/typesafe-ai-core`, project-relative path `typesafe-sdk/typesafe-ai-core/spec/openapi.json` (artifact-level URI pending). Both copies say `0.2.0`. Because the version label did not change when the content did, the drift script must compare content, not version strings.
 
@@ -356,9 +356,9 @@ Expected output as of 2026-10-21 (the digest may change; see Plan of Work):
 
 ```text
 0.2.0
-20
+21
 /v1/models /v1/systemone
-9a1f5d01bac7c4e55d20db1cf8e79aa879977ab9d610766e0eaedd6c45f68ae0  spec/openapi.json
+14bfe394955d2f31dfb653a1b18dd561c8da4d12677915a10fcc8c62e0fcbcc3  spec/openapi.json
 ```
 
 After writing the script:
@@ -440,7 +440,7 @@ The plan is accepted when all of the following hold, observed on a clean checkou
    - `grep -rn 'import qualified' src test` prints nothing, because every qualified import is postpositive;
    - `cabal build all` under the `cabal.project` flags reports no `-Wmissing-deriving-strategies` warning;
    - in `cabal repl typesafe-hs`, `:i TypeSafe.Wire.Content` lists a `Generic` instance.
-6. `docs/adr/` contains 0001 to 0005 and `README.md`, each record with `title`, `status: accepted` and `date: 2026-10-21` frontmatter and Context, Decision and Consequences sections, and every relative link resolves. Check with `ls` and by opening each linked path.
+6. `docs/adr/` contains 0001 to 0005 and `README.md`, each record with `title`, `status: accepted` and `date: 2026-10-24` frontmatter and Context, Decision and Consequences sections, and every relative link resolves. Check with `ls` and by opening each linked path.
 
 
 ## Idempotence and Recovery

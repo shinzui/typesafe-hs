@@ -10,7 +10,7 @@ import Data.Vector (Vector)
 import GHC.Generics (Generic)
 import TypeSafe.Wire.Common
 
--- | Wire representation of the ModelMetadataList schema.
+-- | The available models returned by GET /v1/models, in server-provided order.
 data ModelMetadataList = ModelMetadataList
   { models :: !(Vector ModelMetadata)
   }
@@ -23,7 +23,7 @@ instance ToJSON ModelMetadataList where
 instance FromJSON ModelMetadataList where
   parseJSON = withObject "ModelMetadataList" $ \o -> ModelMetadataList <$> o .: "models"
 
--- | Wire representation of the ModelMetadata schema.
+-- | Model metadata with verbatim release-date text; use releaseDay to parse a day.
 data ModelMetadata = ModelMetadata
   { name :: !(ModelName),
     description :: !(Text),

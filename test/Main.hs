@@ -6,6 +6,7 @@ import Test.Tasty
 import TypeSafe.Conformance.JsonSchema (loadSpec)
 import TypeSafe.Conformance.OperationsTest qualified
 import TypeSafe.Conformance.SchemaTest qualified
+import TypeSafe.ReadmeExampleTest qualified
 import TypeSafe.SpecVersionTest qualified
 import TypeSafe.V1Test qualified
 import TypeSafe.Wire.CommonTest qualified
@@ -19,6 +20,7 @@ main = do
     testGroup
       "typesafe-hs"
       [ TypeSafe.SpecVersionTest.tests spec,
+        TypeSafe.ReadmeExampleTest.tests,
         TypeSafe.Conformance.SchemaTest.tests spec,
         TypeSafe.Conformance.OperationsTest.tests spec,
         TypeSafe.V1Test.tests,

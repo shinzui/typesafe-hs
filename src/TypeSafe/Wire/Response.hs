@@ -32,7 +32,7 @@ requireTag expected o = do
   tag <- o .: "type"
   unless (tag == expected) (fail "unexpected answer discriminator")
 
--- | Wire representation of the SystemOneResponse schema.
+-- | A model's answers keyed by caller-chosen question names, with token usage.
 data SystemOneResponse = SystemOneResponse
   { model :: !(ModelName),
     answers :: !(Map QuestionName Answer),
@@ -83,7 +83,7 @@ instance FromJSON Answer where
       )
       v
 
--- | Wire representation of the NoulAnswer schema.
+-- | The probability of yes or true, preserved without range checks.
 data NoulAnswer = NoulAnswer
   { noul :: !(Scientific)
   }
@@ -96,7 +96,7 @@ instance ToJSON NoulAnswer where
 instance FromJSON NoulAnswer where
   parseJSON = withObject "NoulAnswer" $ \o -> requireTag "noul" o *> (NoulAnswer <$> o .: "noul")
 
--- | Wire representation of the ChoiceAnswer schema.
+-- | The selected label, its confidence and the complete label-probability map.
 data ChoiceAnswer = ChoiceAnswer
   { choice :: !(Text),
     confidence :: !(Scientific),
@@ -111,7 +111,7 @@ instance ToJSON ChoiceAnswer where
 instance FromJSON ChoiceAnswer where
   parseJSON = withObject "ChoiceAnswer" $ \o -> requireTag "choice" o *> (ChoiceAnswer <$> o .: "choice" <*> o .: "confidence" <*> o .: "probabilities")
 
--- | Wire representation of the ScoreAnswer schema.
+-- | An expected rating, its confidence and the verbatim level legend and probabilities.
 data ScoreAnswer = ScoreAnswer
   { score :: !(Scientific),
     confidence :: !(Scientific),
@@ -127,7 +127,7 @@ instance ToJSON ScoreAnswer where
 instance FromJSON ScoreAnswer where
   parseJSON = withObject "ScoreAnswer" $ \o -> requireTag "score" o *> (ScoreAnswer <$> o .: "score" <*> o .: "confidence" <*> o .: "legend" <*> o .: "probabilities")
 
--- | Wire representation of the BoxAnswer schema.
+-- | An image box with required confidence that may explicitly be null on the wire.
 data BoxAnswer = BoxAnswer
   { box :: !(BoxCoordinates),
     confidence :: !(Maybe Scientific)
@@ -141,7 +141,7 @@ instance ToJSON BoxAnswer where
 instance FromJSON BoxAnswer where
   parseJSON = withObject "BoxAnswer" $ \o -> requireTag "box" o *> (BoxAnswer <$> o .: "box" <*> o .: "confidence")
 
--- | Wire representation of the BoxCoordinates schema.
+-- | Image-edge coordinates as fractions of height and width, preserved without clamping.
 data BoxCoordinates = BoxCoordinates
   { top :: !(Scientific),
     bottom :: !(Scientific),
@@ -157,7 +157,7 @@ instance ToJSON BoxCoordinates where
 instance FromJSON BoxCoordinates where
   parseJSON = withObject "BoxCoordinates" $ \o -> BoxCoordinates <$> o .: "top" <*> o .: "bottom" <*> o .: "left" <*> o .: "right"
 
--- | Wire representation of the Usage schema.
+-- | Integral token counts; decoding rejects fractions and values outside Int.
 data Usage = Usage
   { inputTokens :: !(Int),
     outputTokens :: !(Int)

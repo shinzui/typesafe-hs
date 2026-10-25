@@ -42,7 +42,7 @@ instance FromJSON LocationSegment where
   parseJSON (String t) = pure (LocationField t)
   parseJSON v = LocationIndex <$> parseBoundedIntegral v
 
--- | Wire representation of the ValidationError schema.
+-- | One validation failure, with its path, explanation, code, optional text preview and context.
 data ValidationError = ValidationError
   { loc :: !(Vector LocationSegment),
     msg :: !(Text),
@@ -59,7 +59,7 @@ instance ToJSON ValidationError where
 instance FromJSON ValidationError where
   parseJSON = withObject "ValidationError" $ \o -> ValidationError <$> o .: "loc" <*> o .: "msg" <*> o .: "type" <*> o .:! "input" <*> o .:! "ctx"
 
--- | Wire representation of the HTTPValidationError schema.
+-- | Validation envelope; detail may be absent, but a present detail must be an array.
 data HTTPValidationError = HTTPValidationError
   { detail :: !(Maybe (Vector ValidationError))
   }
@@ -87,7 +87,7 @@ instance FromJSON BadRequestDetail where
   parseJSON (Object o) = pure (BadRequestDetailObject o)
   parseJSON _ = fail "expected a string or object detail"
 
--- | Wire representation of the HTTPBadRequestError schema.
+-- | Application-validation detail, required as text or an arbitrary object.
 data HTTPBadRequestError = HTTPBadRequestError
   { detail :: !(BadRequestDetail)
   }
@@ -100,7 +100,7 @@ instance ToJSON HTTPBadRequestError where
 instance FromJSON HTTPBadRequestError where
   parseJSON = withObject "HTTPBadRequestError" $ \o -> HTTPBadRequestError <$> o .: "detail"
 
--- | Wire representation of the ErrorDetail schema.
+-- | Observed structured detail with a required message and optional error_type.
 data ErrorDetail = ErrorDetail
   { errorType :: !(Maybe Text),
     message :: !(Text)

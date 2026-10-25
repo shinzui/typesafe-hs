@@ -61,9 +61,9 @@ This is EP-4 of [docs/masterplans/1-deliver-the-initial-typesafe-hs-client.md](.
 
 ## Progress
 
-- [x] Milestone 1 (EP-4 M1): `TypeSafe.V1` exports the API type and its endpoint sub-types, compiling in the library. The exported names are `API`, `Routes (..)`, `SystemOneEndpoint` and `ModelsEndpoint`. Acceptance: `cabal build lib:typesafe-hs` succeeds with `-Wall` clean, and `cabal repl` shows `:kind! TypeSafe.V1.API` without error.
-- [x] Milestone 2: the loopback producer/consumer check passes. Acceptance: the `TypeSafe.V1` tests prove four things: the request bytes received by the mock server equal `encodeSystemOneRequest`; `Authorization: Bearer <key>` is sent; the golden response round-trips; and a 422 reply surfaces as `FailureResponse` with a body `parseErrorBody` decodes to `ErrorBodyValidation`.
-- [x] Milestone 3: the full `Methods` surface is proven. Acceptance: the danger-zone headers are sent only when requested; `listModels` decodes; `getClientEnv` parses a base URL and rejects a malformed one; `cabal test` passes as a whole.
+- [x] (2026-10-24) Milestone 1 (EP-4 M1): `TypeSafe.V1` exports the API type and its endpoint sub-types, compiling in the library. The exported names are `API`, `Routes (..)`, `SystemOneEndpoint` and `ModelsEndpoint`. Acceptance: `cabal build lib:typesafe-hs` succeeds with `-Wall` clean, and `cabal repl` shows `:kind! TypeSafe.V1.API` without error.
+- [x] (2026-10-24) Milestone 2: the loopback producer/consumer check passes. Acceptance: the `TypeSafe.V1` tests prove four things: the request bytes received by the mock server equal `encodeSystemOneRequest`; `Authorization: Bearer <key>` is sent; the golden response round-trips; and a 422 reply surfaces as `FailureResponse` with a body `parseErrorBody` decodes to `ErrorBodyValidation`.
+- [x] (2026-10-24) Milestone 3: the full `Methods` surface is proven. Acceptance: the danger-zone headers are sent only when requested; `listModels` decodes; `getClientEnv` parses a base URL and rejects a malformed one; `cabal test` passes as a whole.
 
 
 ## Surprises & Discoveries
@@ -72,6 +72,8 @@ The raw malformed-success fixture is served by a WAI middleware branch (ReplyRaw
 
 
 ## Decision Log
+
+- Decision (2026-10-24, final bounds review in EP-6): http-client-tls is bounded >=0.3.5 && <0.5 because newTlsManagerWith was introduced in 0.3.5. This supersedes the earlier >=0.3 minimum while preserving the intersection with Baikai. No public behavior changes.
 
 - Decision: `getClientEnv` builds its connection manager from `Network.HTTP.Client.TLS.tlsManagerSettings` unchanged. It sets no response timeout, which differs on purpose from Mercury's `getClientEnv`, where it is `responseTimeoutNone`.
   Rationale: R1 forbids timeout policy beyond what the caller's `Manager` carries. Choosing "no timeout" is a policy, just as choosing thirty seconds would be. Keeping http-client's defaults is the least opinionated choice. A caller who wants a different timeout or proxy behaviour builds its own `ClientEnv` with `Servant.Client.mkClientEnv`, which `makeMethods` accepts. The comment on `getClientEnv` says so.

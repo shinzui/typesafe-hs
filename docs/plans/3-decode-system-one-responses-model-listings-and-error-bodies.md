@@ -68,9 +68,9 @@ This plan implements requirements R4, R5, R6, R9 and the response half of R11 fr
 
 ## Progress
 
-- [x] Milestone 1: `TypeSafe.Wire.Response` decodes and encodes success bodies. Acceptance: Baikai's response golden decodes to the expected values; the copies without `confidence` or `score` fail; `1e400` survives; a fractional token count fails; an unknown answer tag decodes to `AnswerOther` and re-encodes unchanged.
-- [x] Milestone 2: `TypeSafe.Wire.Models` decodes and encodes the model listing. Acceptance: the listing decodes with an extra unknown field present, `releaseDay` parses `2026-09-15`, and a missing `release_date` fails.
-- [x] Milestone 3: `TypeSafe.Wire.Error` has codecs for the 422 body, and `parseErrorBody` classifies every observed error form. Acceptance: each form below decodes to its expected constructor, with no status-code mapping anywhere. The full suite and `nix build` pass.
+- [x] (2026-10-24) Milestone 1: `TypeSafe.Wire.Response` decodes and encodes success bodies. Acceptance: Baikai's response golden decodes to the expected values; the copies without `confidence` or `score` fail; `1e400` survives; a fractional token count fails; an unknown answer tag decodes to `AnswerOther` and re-encodes unchanged.
+- [x] (2026-10-24) Milestone 2: `TypeSafe.Wire.Models` decodes and encodes the model listing. Acceptance: the listing decodes with an extra unknown field present, `releaseDay` parses `2026-09-15`, and a missing `release_date` fails.
+- [x] (2026-10-24) Milestone 3: `TypeSafe.Wire.Error` has codecs for the 422 body, and `parseErrorBody` classifies every observed error form. Acceptance: each form below decodes to its expected constructor, with no status-code mapping anywhere. The full suite and `nix build` pass.
 
 
 ## Surprises & Discoveries
@@ -207,7 +207,7 @@ Read those files before you start, because the exact names in the working tree w
   - Requires `msg` (a string) and `type` (a string).
   - Has an optional `input` (any JSON) and an optional `ctx` (an object).
 
-**Error forms outside the specification.** The service also sends error bodies the specification does not describe. These were observed through the official TypeScript SDK, at the local checkout `/Users/shinzui/Keikaku/hub/agents/typesafe-sdk-js` (v0.7.0), in `src/errors.ts` and `test/errors.test.ts`:
+**Recorded error forms.** The planning review recorded the following bodies in addition to the schema-bound responses. The historical SDK checkout is no longer available; these shapes are retained as fixtures exercising R6's structured parsing and complete raw fallback:
 
 - an unknown model gives HTTP 400 with `{"detail": {"error_type": "api_usage_error", "message": "Unknown model: x"}}`;
 - some failures send `{"detail": "fastapi style"}`;

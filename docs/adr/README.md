@@ -8,3 +8,4 @@ Each numbered record preserves one durable decision and its consequences. Record
 - [The first release targets the published document with JSON bodies only](0004-the-first-release-targets-the-published-document-with-json-bodies-only.md)
 - [Haskell-jitsurei patterns adopted and declined](0005-haskell-jitsurei-patterns-adopted-and-declined.md)
 - [Conformance fails on unbound specification features](0006-conformance-fails-on-unbound-specification-features.md)
+- [Release candidates are proven from source distributions](0007-release-candidates-are-proven-from-source-distributions.md)

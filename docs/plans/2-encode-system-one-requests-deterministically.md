@@ -55,8 +55,8 @@ The governing requirements are R2, R3, R7, R8 and R11 in [docs/initial-spec.md](
 
 ## Progress
 
-- [x] Milestone 1: `src/TypeSafe/Wire/Request.hs` defines every request type with `ToJSON` (hand-written `toEncoding`) and `FromJSON`, plus `encodeSystemOneRequest`, `duplicateQuestionNames` and `duplicateChoiceLabels`. The umbrella `TypeSafe.Wire` re-exports them. `cabal build all` succeeds with no warnings from the new module.
-- [x] Milestone 2: the `TypeSafe.Wire.Request` tasty group passes under `cabal test`. It covers the R11 golden request (structural and exact bytes), determinism, declared order, the absent-versus-null rules, `QuestionOther` pass-through, duplicate reporting and decode of each question variant.
+- [x] (2026-10-24) Milestone 1: `src/TypeSafe/Wire/Request.hs` defines every request type with `ToJSON` (hand-written `toEncoding`) and `FromJSON`, plus `encodeSystemOneRequest`, `duplicateQuestionNames` and `duplicateChoiceLabels`. The umbrella `TypeSafe.Wire` re-exports them. `cabal build all` succeeds with no warnings from the new module.
+- [x] (2026-10-24) Milestone 2: the `TypeSafe.Wire.Request` tasty group passes under `cabal test`. It covers the R11 golden request (structural and exact bytes), determinism, declared order, the absent-versus-null rules, `QuestionOther` pass-through, duplicate reporting and decode of each question variant.
 
 
 ## Surprises & Discoveries
@@ -109,7 +109,7 @@ The repository is `typesafe-hs`, a Haskell library for TypeSafe's System One HTT
 **Prerequisite: EP-1.** This plan starts only after [docs/plans/1-scaffold-the-package-and-vendor-the-system-one-specification.md](1-scaffold-the-package-and-vendor-the-system-one-specification.md) is Complete. That plan provides the following:
 
 - **`typesafe-hs.cabal` and `cabal.project` at the repository root.** The package has a common stanza: `GHC2024`, the haskell-jitsurei baseline extensions `DeriveAnyClass`, `DuplicateRecordFields`, `OverloadedLabels` and `OverloadedStrings`, plus `NoFieldSelectors` and `OverloadedRecordDot`, and `-Wall`. The test suite adds `MultilineStrings`, and `cabal.project` makes `-Werror=missing-fields` fatal for local builds. It also has a `library` with `hs-source-dirs: src`, and one test suite, `typesafe-hs-test`, using `tasty`, with `hs-source-dirs: test` and `main-is: Main.hs`.
-- **`spec/openapi.json`.** TypeSafe's OpenAPI document, the machine-readable API description, as published at https://api.typesafe.ai/openapi.json on 2026-10-21. It is normalised with `jq -S .` and its `info.version` is `0.2.0`.
+- **`spec/openapi.json`.** TypeSafe's OpenAPI document, the machine-readable API description, as published at https://api.typesafe.ai/openapi.json on 2026-10-24. It is normalised with `jq -S .` and its `info.version` is `0.2.0`.
 - **`src/TypeSafe/Wire/Common.hs`.** The shared primitives:
   - `apiSpecVersion`;
   - `newtype ModelName = ModelName Text` and `newtype QuestionName = QuestionName Text`, both with `deriving stock (Generic, Show)` and `deriving newtype (Eq, Ord, IsString, ToJSON, FromJSON, ToJSONKey, FromJSONKey)`;

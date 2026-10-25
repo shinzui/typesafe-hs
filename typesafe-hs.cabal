@@ -1,18 +1,29 @@
 cabal-version: 3.12
 name: typesafe-hs
 version: 0.1.0.0
+author: Nadeem Bitar
+maintainer: nadeem@gmail.com
+homepage: https://github.com/shinzui/typesafe-hs
+bug-reports: https://github.com/shinzui/typesafe-hs/issues
+description:
+  Haskell types, deterministic request encoding and lossless response decoding
+  for the TypeSafe System One API, mirroring the vendored OpenAPI 0.2.0
+  document, plus servant routes and authenticated client methods. Applications
+  own retries, failure classification, credentials, logging and timeout policy.
+
+extra-doc-files:
+  CHANGELOG.md
+  README.md
+
 synopsis: Wire types and servant client for the TypeSafe System One API
 category: AI, Web
 build-type: Simple
 tested-with: ghc ==9.12.4
 extra-source-files:
+  scripts/check-spec-drift.sh
   spec/openapi.json
-  test/golden/baikai-request.bytes
-  test/golden/baikai-request.json
-  test/golden/baikai-response-missing-confidence.json
-  test/golden/baikai-response-missing-score.json
-  test/golden/baikai-response.json
-  test/golden/validation-error-422.json
+  test/golden/*.bytes
+  test/golden/*.json
 
 common common
   default-language: GHC2024
@@ -44,7 +55,7 @@ library
     base >=4.20 && <5,
     bytestring ^>=0.12,
     containers ^>=0.7,
-    http-client-tls >=0.3 && <0.5,
+    http-client-tls >=0.3.5 && <0.5,
     http-types ^>=0.12,
     scientific ^>=0.3,
     servant >=0.20.3 && <0.21,
@@ -63,6 +74,8 @@ test-suite typesafe-hs-test
     TypeSafe.Conformance.JsonSchema
     TypeSafe.Conformance.OperationsTest
     TypeSafe.Conformance.SchemaTest
+    TypeSafe.ReadmeExample
+    TypeSafe.ReadmeExampleTest
     TypeSafe.SpecVersionTest
     TypeSafe.Test.Arbitrary
     TypeSafe.Test.MockServer
@@ -98,3 +111,7 @@ test-suite typesafe-hs-test
     vector ^>=0.13,
     wai >=3.2.4 && <3.3,
     warp >=3.3 && <3.5,
+
+source-repository head
+  type: git
+  location: https://github.com/shinzui/typesafe-hs.git

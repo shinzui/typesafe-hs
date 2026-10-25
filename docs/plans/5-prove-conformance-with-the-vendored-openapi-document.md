@@ -61,10 +61,10 @@ This is requirement R10 of [docs/initial-spec.md](../initial-spec.md). It is chi
 
 ## Progress
 
-- [x] Milestone 1: schema reader, validator and audits of the document's own vocabulary. The conformance group passes against the vendored document. The audit reports an injected unknown keyword (`pattern`) and an unlisted content type, and this is checked both by permanent meta-tests and by a manual run against a mutated copy.
-- [x] Milestone 2: `Arbitrary` generators and per-schema codec checks for every schema. These cover validation of encoded values, `toEncoding`/`toJSON` agreement, round trips, emitted properties, required/optional removal and the property-to-field table.
-- [x] Milestone 3: discriminator, unknown-tag, example and constant checks. Constructors match both discriminator mappings, including `box`. Property-level and operation-level examples validate, decode and re-encode. The base URL and paths constants match the document.
-- [x] Milestone 4: operation binding, which requires EP-4 M1. Every `(method, path)` in the document is produced by the servant client of `TypeSafe.V1.API`. Each request carries the declared bearer security and header parameters with the `application/json` content type, and each canned example response decodes.
+- [x] (2026-10-24) Milestone 1: schema reader, validator and audits of the document's own vocabulary. The conformance group passes against the vendored document. The audit reports an injected unknown keyword (`pattern`) and an unlisted content type, and this is checked both by permanent meta-tests and by a manual run against a mutated copy.
+- [x] (2026-10-24) Milestone 2: `Arbitrary` generators and per-schema codec checks for every schema. These cover validation of encoded values, `toEncoding`/`toJSON` agreement, round trips, emitted properties, required/optional removal and the property-to-field table.
+- [x] (2026-10-24) Milestone 3: discriminator, unknown-tag, example and constant checks. Constructors match both discriminator mappings, including `box`. Property-level and operation-level examples validate, decode and re-encode. The base URL and paths constants match the document.
+- [x] (2026-10-24) Milestone 4: operation binding, which requires EP-4 M1. Every `(method, path)` in the document is produced by the servant client of `TypeSafe.V1.API`. Each request carries the declared bearer security and header parameters with the `application/json` content type, and each canned example response decodes.
 
 
 ## Surprises & Discoveries
@@ -118,7 +118,7 @@ Completed 2026-10-24. All 206 tests pass, including 21 schema groups, field gett
 
 **OpenAPI and JSON Schema.** An "OpenAPI document" is a JSON file describing an HTTP API. `paths` lists the operations: each path, under it each HTTP method, and for each operation its parameters, request body, responses and security requirement. `components.schemas` holds named "schemas". A schema is a JSON Schema object such as `{"type": "object", "properties": {...}, "required": [...]}` that says which JSON values are allowed. The words inside a schema (`type`, `properties`, `required`, `anyOf` and so on) are "keywords". A "discriminator" is the OpenAPI annotation saying that a `oneOf` union is told apart by one property. Here it is the `type` property of a question or answer, and `discriminator.mapping` lists each allowed tag and its schema.
 
-**The vendored document.** `spec/openapi.json` is vendored by EP-1, normalised with `jq -S .`. It is the document published at https://api.typesafe.ai/openapi.json on 2026-10-21, with `info.version` `0.2.0` and OpenAPI 3.1.0. Its root keys are `components`, `info`, `openapi`, `paths` and `servers`, and `servers` is `[{"url": "https://api.typesafe.ai"}]`.
+**The vendored document.** `spec/openapi.json` is vendored by EP-1, normalised with `jq -S .`. It is the document published at https://api.typesafe.ai/openapi.json on 2026-10-24, with `info.version` `0.2.0` and OpenAPI 3.1.0. Its root keys are `components`, `info`, `openapi`, `paths` and `servers`, and `servers` is `[{"url": "https://api.typesafe.ai"}]`.
 
 It has two operations:
 

@@ -18,9 +18,9 @@ url=${TYPESAFE_OPENAPI_URL:-https://api.typesafe.ai/openapi.json}
 if ! curl -fsS --max-time 30 "$url" -o "$tmp/published.json"; then
   echo "could not fetch $url" >&2; exit 2
 fi
-if ! jq -S . "$tmp/published.json" > "$tmp/new.json" ||
-   ! jq -S . "$root/spec/openapi.json" > "$tmp/old.json"; then
-  echo "invalid or unreadable OpenAPI JSON" >&2; exit 2
+if ! jq -e -S . "$tmp/published.json" > "$tmp/new.json" ||
+   ! jq -e -S . "$root/spec/openapi.json" > "$tmp/old.json"; then
+  echo "invalid or unreadable OpenAPI document" >&2; exit 2
 fi
 status=0
 diff -u "$tmp/old.json" "$tmp/new.json" || status=$?
