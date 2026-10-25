@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T03:32:09Z
       mode: "update"
       note: "ADR 0005 spec drops the FieldSelectors exception; cabal.project named as the only home for -Werror flags"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:34:34Z
+      mode: "implement"
+      note: "Vendor approved current specification and implement scaffold, primitives and ADRs"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -53,14 +58,14 @@ You can see it working when `cabal test` prints its tests passing. They prove th
 
 ## Progress
 
-- [ ] Milestone 1: `spec/openapi.json` is vendored, normalised and tracked, and `scripts/check-spec-drift.sh` reports the vendored copy current (exit 0).
-- [ ] Milestone 2: the `typesafe-hs` package builds with the haskell-jitsurei baseline common stanza plus `NoFieldSelectors` and `OverloadedRecordDot`. `TypeSafe.Wire.Common` and the umbrella `TypeSafe.Wire` export the shared primitives, each deriving `Generic` with explicit strategies, and `cabal test` and `nix build` both pass the `Content` codec tests and the `apiSpecVersion` test.
-- [ ] Milestone 3: `docs/adr/` holds records 0001 to 0005 and an index, and formatting (`nix fmt`) and `nix flake check` are clean.
+- [x] Milestone 1 (2026-10-24; drift script exit 0 against the approved 21-schema baseline): `spec/openapi.json` is vendored, normalised and tracked, and `scripts/check-spec-drift.sh` reports the vendored copy current (exit 0).
+- [x] Milestone 2 (2026-10-24; 13 tests pass with GHC 9.12.4, Cabal and Nix): the `typesafe-hs` package builds with the haskell-jitsurei baseline common stanza plus `NoFieldSelectors` and `OverloadedRecordDot`. `TypeSafe.Wire.Common` and the umbrella `TypeSafe.Wire` export the shared primitives, each deriving `Generic` with explicit strategies, and `cabal test` and `nix build` both pass the `Content` codec tests and the `apiSpecVersion` test.
+- [x] Milestone 3 (2026-10-24; five ADRs and index, nix fmt and nix flake check pass): `docs/adr/` holds records 0001 to 0005 and an index, and formatting (`nix fmt`) and `nix flake check` are clean.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+- **2026-10-24 baseline update, approved by the user.** The freshly fetched document still reports `0.2.0`, but now has 21 schemas: `HTTPBadRequestError` was added, with required `detail` accepting a string or arbitrary object. Both endpoints now document HTTP 400 using it. The normalized SHA-256 is `14bfe394955d2f31dfb653a1b18dd561c8da4d12677915a10fcc8c62e0fcbcc3`. EP-3 owns its wire codec; EP-5 binds the additional schema and HTTP 400 response references. JSON-only request scope and raw `ClientError` behavior remain the accepted design.
 
 
 ## Decision Log
@@ -91,7 +96,7 @@ You can see it working when `cabal test` prints its tests passing. They prove th
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+The foundation is complete. Cabal and Nix both pass 13 tests; REPL confirms the umbrella exports Content and Generic. Drift exits 0/1/2 and version mismatch, missing-file and corrupt-file failures were exercised and restored. The user approved the 21-schema baseline, whose content digest is recorded above. nix fmt normalized existing whitespace in nix/haskell.nix without changing behavior. ADR dates reflect implementation on 2026-10-24 rather than the original planned date.
 
 
 ## Context and Orientation
@@ -172,9 +177,9 @@ TypeSafe publishes its OpenAPI document at `https://api.typesafe.ai/openapi.json
 
 - `openapi` 3.1.0 and `info.version` `0.2.0`;
 - the paths `/v1/models` and `/v1/systemone`;
-- 20 component schemas: `Answer`, `Asset`, `BoxAnswer`, `BoxCoordinates`, `BoxQuestion`, `ChoiceAnswer`, `ChoiceQuestion`, `HTTPValidationError`, `ModelMetadata`, `ModelMetadataList`, `NoulAnswer`, `NoulCriteria`, `NoulQuestion`, `Question`, `ScoreAnswer`, `ScoreQuestion`, `SystemOneRequest`, `SystemOneResponse`, `Usage` and `ValidationError`.
+- 21 component schemas (current approved baseline): `Answer`, `Asset`, `BoxAnswer`, `BoxCoordinates`, `BoxQuestion`, `ChoiceAnswer`, `ChoiceQuestion`, `HTTPBadRequestError`, `HTTPValidationError`, `ModelMetadata`, `ModelMetadataList`, `NoulAnswer`, `NoulCriteria`, `NoulQuestion`, `Question`, `ScoreAnswer`, `ScoreQuestion`, `SystemOneRequest`, `SystemOneResponse`, `Usage` and `ValidationError`.
 
-Once normalised with `jq -S .`, the copy fetched that day was 1280 lines with SHA-256 `9a1f5d01bac7c4e55d20db1cf8e79aa879977ab9d610766e0eaedd6c45f68ae0`. `jq -S .` re-indents the JSON and sorts every object's keys, so the file is stable to diff.
+Once normalised with `jq -S .`, the copy fetched that day was a normalized SHA-256 of `14bfe394955d2f31dfb653a1b18dd561c8da4d12677915a10fcc8c62e0fcbcc3` (2026-10-24). `jq -S .` re-indents the JSON and sorts every object's keys, so the file is stable to diff.
 
 That document is a superset of the older copy `docs/initial-spec.md` was written against. The older copy is vendored by the community SDK at `mori://byteally/typesafe-sdk/packages/typesafe-ai-core`, project-relative path `typesafe-sdk/typesafe-ai-core/spec/openapi.json` (artifact-level URI pending). Both copies say `0.2.0`. Because the version label did not change when the content did, the drift script must compare content, not version strings.
 
@@ -194,7 +199,7 @@ The work has three milestones. Each is independently verifiable and leaves the r
 Create `spec/openapi.json` by fetching the published document and normalising it with `jq -S .`. Always re-fetch. Do not copy any other local file, because the published document may have moved since this plan was written. Compare the fetched document's `info.version` and schema list with the facts in Context and Orientation:
 
 - **If they match,** continue.
-- **If they differ** (a new version string, or a schema added or removed), stop. Record the difference in this plan's Surprises & Discoveries and in the MasterPlan's Surprises & Discoveries, and ask for a decision before continuing. Every later plan assumes the 20 schemas listed above.
+- **If they differ** (a new version string, or a schema added or removed), stop. Record the difference in this plan's Surprises & Discoveries and in the MasterPlan's Surprises & Discoveries, and ask for a decision before continuing. Every later plan uses the 21-schema baseline approved on 2026-10-24.
 - **If only the SHA-256 differs** but the version and schema list match, record the new digest in Surprises & Discoveries and continue.
 
 Write `scripts/check-spec-drift.sh`. It is a POSIX `sh` script (or `bash` with `set -euo pipefail`) that does five things:

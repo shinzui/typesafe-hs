@@ -1,0 +1,59 @@
+cabal-version: 3.12
+name: typesafe-hs
+version: 0.1.0.0
+synopsis: Wire types and servant client for the TypeSafe System One API
+category: AI, Web
+build-type: Simple
+tested-with: ghc ==9.12.4
+extra-source-files: spec/openapi.json
+
+common common
+  default-language: GHC2024
+  default-extensions:
+    DeriveAnyClass
+    DuplicateRecordFields
+    NoFieldSelectors
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+
+  ghc-options: -Wall
+
+library
+  import: common
+  hs-source-dirs: src
+  exposed-modules:
+    TypeSafe.Wire
+    TypeSafe.Wire.Common
+
+  build-depends:
+    aeson ^>=2.2,
+    base >=4.20 && <5,
+    http-types ^>=0.12,
+    text ^>=2.1,
+
+test-suite typesafe-hs-test
+  import: common
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: Main.hs
+  other-modules:
+    TypeSafe.SpecVersionTest
+    TypeSafe.Wire.CommonTest
+
+  default-extensions: MultilineStrings
+  ghc-options:
+    -threaded
+    -rtsopts
+    -with-rtsopts=-N
+
+  build-depends:
+    aeson,
+    base,
+    bytestring ^>=0.12,
+    http-types,
+    tasty >=1.4 && <1.6,
+    tasty-hunit ^>=0.10,
+    text,
+    typesafe-hs,
+    vector ^>=0.13,

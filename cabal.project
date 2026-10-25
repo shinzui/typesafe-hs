@@ -1,0 +1,12 @@
+packages: .
+tests: True
+
+package typesafe-hs
+  ghc-options:
+    -Werror=missing-fields
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wmissing-deriving-strategies
+    -Wredundant-constraints

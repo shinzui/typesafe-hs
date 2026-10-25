@@ -21,6 +21,11 @@ provenance:
       at: 2026-10-22T03:32:09Z
       mode: "update"
       note: "Apply the 2026-10-22 review: -Werror flags confined to cabal.project, FieldSelectors exception dropped after the record-dot premise was refuted, Integration Points gaps closed, test-module naming and time bound fixed"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:34:34Z
+      mode: "implement"
+      note: "Implement the approved 21-schema baseline and initial client"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -48,7 +53,7 @@ The governing requirements are R1 to R12 in [docs/initial-spec.md](../initial-sp
 - **Calling the API.** A program can call both operations through a servant `API` type and a servant-client `makeMethods`, in the shape of the Mercury `openai` and `claude` packages. Failures surface as servant-client's unmodified `ClientError`.
 - **Conformance.** A test suite proves the Haskell codecs match the vendored OpenAPI document schema by schema and property by property. A script reports when the published document has drifted from the vendored copy.
 
-**Protocol baseline.** The baseline is the OpenAPI document published at https://api.typesafe.ai/openapi.json as of 2026-10-21, vendored at `spec/openapi.json`. Its `info.version` is `0.2.0`. That published document has grown beyond the copy `docs/initial-spec.md` was written against (see Surprises & Discoveries): it now also defines box questions and answers, image assets, two optional request headers and a multipart request body. The user chose, on 2026-10-21, to target the current published document with JSON request bodies only. Every schema in it, including `BoxQuestion`, `BoxAnswer`, `BoxCoordinates` and `Asset`, gets a Haskell type. The optional `TypeSafe-Danger-Zone-Images` and `TypeSafe-Danger-Zone-Long-Context` request headers are bound in the servant API.
+**Protocol baseline.** The baseline is the OpenAPI document published at https://api.typesafe.ai/openapi.json as of 2026-10-24, vendored at `spec/openapi.json`. Its `info.version` is `0.2.0`. That published document has grown beyond the copy `docs/initial-spec.md` was written against (see Surprises & Discoveries): it now also defines box questions and answers, image assets, two optional request headers and a multipart request body. The user chose, on 2026-10-21, to target the current published document with JSON request bodies only. Every schema in it, including `BoxQuestion`, `BoxAnswer`, `BoxCoordinates`, `Asset` and `HTTPBadRequestError`, gets a Haskell type. The optional `TypeSafe-Danger-Zone-Images` and `TypeSafe-Danger-Zone-Long-Context` request headers are bound in the servant API.
 
 **Exclusions.** The following are outside this initiative:
 
@@ -94,8 +99,8 @@ That is why this library must surface raw `ClientError` and status codes without
 
 | # | Title | Path | Hard Deps | Soft Deps | Status |
 |---|-------|------|-----------|-----------|--------|
-| 1 | Scaffold the package and vendor the System One specification | docs/plans/1-scaffold-the-package-and-vendor-the-system-one-specification.md | None | None | Not Started |
-| 2 | Encode System One requests deterministically | docs/plans/2-encode-system-one-requests-deterministically.md | EP-1 | None | Not Started |
+| 1 | Scaffold the package and vendor the System One specification | docs/plans/1-scaffold-the-package-and-vendor-the-system-one-specification.md | None | None | Complete |
+| 2 | Encode System One requests deterministically | docs/plans/2-encode-system-one-requests-deterministically.md | EP-1 | None | In Progress |
 | 3 | Decode System One responses, model listings and error bodies | docs/plans/3-decode-system-one-responses-model-listings-and-error-bodies.md | EP-1 | None | Not Started |
 | 4 | Bind the System One API with servant and servant-client | docs/plans/4-bind-the-system-one-api-with-servant-and-servant-client.md | EP-2, EP-3 | None | Not Started |
 | 5 | Prove conformance with the vendored OpenAPI document | docs/plans/5-prove-conformance-with-the-vendored-openapi-document.md | EP-2, EP-3, EP-4 M1 | EP-4 | Not Started |
@@ -203,10 +208,12 @@ EP-1 also records which haskell-jitsurei patterns were adopted and which were de
 
 ## Progress
 
-Not started as of 2026-10-22. All six child plans have been drafted and reviewed, and the review's findings were applied the same day; EP-1 is the only plan that can start. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
+Implementation started on 2026-10-24. EP-1 is complete (13 tests, Cabal/Nix builds and flake checks); EP-2 is in progress. The user approved the current 21-schema baseline after the mandatory drift check. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
 
 
 ## Surprises & Discoveries
+
+- **2026-10-24 baseline update, approved by the user.** The freshly fetched document still reports `0.2.0`, but now has 21 schemas: `HTTPBadRequestError` was added, with required `detail` accepting a string or arbitrary object. Both endpoints now document HTTP 400 using it. The normalized SHA-256 is `14bfe394955d2f31dfb653a1b18dd561c8da4d12677915a10fcc8c62e0fcbcc3`. EP-3 owns its wire codec; EP-5 binds the additional schema and HTTP 400 response references. JSON-only request scope and raw `ClientError` behavior remain the accepted design.
 
 - **The published OpenAPI document has drifted since `docs/initial-spec.md` was written, without a version bump.** Both the published copy, fetched 2026-10-21, and the reference copy in the community SDK (`mori://byteally/typesafe-sdk/packages/typesafe-ai-core`, project-relative path `typesafe-sdk/typesafe-ai-core/spec/openapi.json`, artifact-level URI pending) report `info.version` `0.2.0`. The published copy adds:
   - the schemas `BoxQuestion`, `BoxAnswer`, `BoxCoordinates` and `Asset`;
@@ -247,6 +254,8 @@ listModels = routesIO.models "Bearer test"   -- compiles and runs
   The one trap nearby: `genericClientHoist` leaves its source monad to the natural transformation's type, so a stub that ignores its argument needs the signature shown, while a body that applies `runClientM` pins the monad on its own.
 
 ## Decision Log
+
+- Decision (2026-10-24): adopt the current 21-schema published baseline, including `HTTPBadRequestError`, following the user's explicit approval. This supersedes the 20-schema baseline wherever earlier planning text assumes it. EP-3 and EP-5 must implement and verify the added error schema.
 
 - Decision: Target the OpenAPI document as published on 2026-10-21 and bind every schema in it, including the box and asset schemas. Bind JSON request bodies only, and defer the multipart request body to a separate plan outside this MasterPlan ([docs/plans/7-send-images-with-multipart-system-one-requests.md](../plans/7-send-images-with-multipart-system-one-requests.md)).
   Rationale: R10 requires every schema in the vendored document to be bound, and the drift script must not report the vendored copy as stale on day one. Binding multipart would need `servant-multipart-api` and `servant-multipart-client`, which lie outside R1's dependency list, while Baikai needs no images. The user chose this option when asked.
