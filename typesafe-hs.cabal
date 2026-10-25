@@ -12,6 +12,7 @@ extra-source-files:
   test/golden/baikai-response-missing-confidence.json
   test/golden/baikai-response-missing-score.json
   test/golden/baikai-response.json
+  test/golden/validation-error-422.json
 
 common common
   default-language: GHC2024
@@ -29,6 +30,7 @@ library
   import: common
   hs-source-dirs: src
   exposed-modules:
+    TypeSafe.V1
     TypeSafe.Wire
     TypeSafe.Wire.Common
     TypeSafe.Wire.Error
@@ -42,8 +44,12 @@ library
     base >=4.20 && <5,
     bytestring ^>=0.12,
     containers ^>=0.7,
+    http-client-tls >=0.3 && <0.5,
     http-types ^>=0.12,
     scientific ^>=0.3,
+    servant >=0.20.3 && <0.21,
+    servant-client ^>=0.20,
+    servant-client-core >=0.20.3 && <0.22,
     text ^>=2.1,
     time ^>=1.14,
     vector ^>=0.13,
@@ -55,6 +61,8 @@ test-suite typesafe-hs-test
   main-is: Main.hs
   other-modules:
     TypeSafe.SpecVersionTest
+    TypeSafe.Test.MockServer
+    TypeSafe.V1Test
     TypeSafe.Wire.CommonTest
     TypeSafe.Wire.RequestTest
     TypeSafe.Wire.ResponseTest
@@ -72,9 +80,15 @@ test-suite typesafe-hs-test
     containers,
     http-types,
     scientific,
+    servant,
+    servant-client,
+    servant-client-core,
+    servant-server >=0.20 && <0.21,
     tasty >=1.4 && <1.6,
     tasty-hunit ^>=0.10,
     text,
     time,
     typesafe-hs,
     vector ^>=0.13,
+    wai >=3.2.4 && <3.3,
+    warp >=3.3 && <3.5,

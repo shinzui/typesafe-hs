@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T03:32:09Z
       mode: "update"
       note: "Drop the FieldSelectors pragma and read routes with record dot; fix servant checkout paths and Mercury line range; note the run signature is load-bearing; rename test module to V1Test"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:41:45Z
+      mode: "implement"
+      note: "Bind NamedRoutes and verify loopback bytes, errors and headers"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -56,14 +61,14 @@ This is EP-4 of [docs/masterplans/1-deliver-the-initial-typesafe-hs-client.md](.
 
 ## Progress
 
-- [ ] Milestone 1 (EP-4 M1): `TypeSafe.V1` exports the API type and its endpoint sub-types, compiling in the library. The exported names are `API`, `Routes (..)`, `SystemOneEndpoint` and `ModelsEndpoint`. Acceptance: `cabal build lib:typesafe-hs` succeeds with `-Wall` clean, and `cabal repl` shows `:kind! TypeSafe.V1.API` without error.
-- [ ] Milestone 2: the loopback producer/consumer check passes. Acceptance: the `TypeSafe.V1` tests prove four things: the request bytes received by the mock server equal `encodeSystemOneRequest`; `Authorization: Bearer <key>` is sent; the golden response round-trips; and a 422 reply surfaces as `FailureResponse` with a body `parseErrorBody` decodes to `ErrorBodyValidation`.
-- [ ] Milestone 3: the full `Methods` surface is proven. Acceptance: the danger-zone headers are sent only when requested; `listModels` decodes; `getClientEnv` parses a base URL and rejects a malformed one; `cabal test` passes as a whole.
+- [x] Milestone 1 (EP-4 M1): `TypeSafe.V1` exports the API type and its endpoint sub-types, compiling in the library. The exported names are `API`, `Routes (..)`, `SystemOneEndpoint` and `ModelsEndpoint`. Acceptance: `cabal build lib:typesafe-hs` succeeds with `-Wall` clean, and `cabal repl` shows `:kind! TypeSafe.V1.API` without error.
+- [x] Milestone 2: the loopback producer/consumer check passes. Acceptance: the `TypeSafe.V1` tests prove four things: the request bytes received by the mock server equal `encodeSystemOneRequest`; `Authorization: Bearer <key>` is sent; the golden response round-trips; and a 422 reply surfaces as `FailureResponse` with a body `parseErrorBody` decodes to `ErrorBodyValidation`.
+- [x] Milestone 3: the full `Methods` surface is proven. Acceptance: the danger-zone headers are sent only when requested; `listModels` decodes; `getClientEnv` parses a base URL and rejects a malformed one; `cabal test` passes as a whole.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+The raw malformed-success fixture is served by a WAI middleware branch (ReplyRaw), while normal responses and errors use the shared NamedRoutes server. This preserves exact raw bytes without changing the API type.
 
 
 ## Decision Log
@@ -107,7 +112,7 @@ This is EP-4 of [docs/masterplans/1-deliver-the-initial-typesafe-hs-client.md](.
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-24. All 46 tests pass, including eight loopback/client tests. The producer/consumer gate verifies exact request bytes, bearer auth, decoded responses, unchanged FailureResponse status/headers/body and DecodeFailure. Both danger-zone flags and the model route are exercised. The library compiles cleanly with exported NamedRoutes endpoint types; no transport policy was introduced.
 
 
 ## Context and Orientation

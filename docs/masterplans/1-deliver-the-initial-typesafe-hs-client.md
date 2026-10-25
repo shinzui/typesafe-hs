@@ -102,8 +102,8 @@ That is why this library must surface raw `ClientError` and status codes without
 | 1 | Scaffold the package and vendor the System One specification | docs/plans/1-scaffold-the-package-and-vendor-the-system-one-specification.md | None | None | Complete |
 | 2 | Encode System One requests deterministically | docs/plans/2-encode-system-one-requests-deterministically.md | EP-1 | None | Complete |
 | 3 | Decode System One responses, model listings and error bodies | docs/plans/3-decode-system-one-responses-model-listings-and-error-bodies.md | EP-1 | None | Complete |
-| 4 | Bind the System One API with servant and servant-client | docs/plans/4-bind-the-system-one-api-with-servant-and-servant-client.md | EP-2, EP-3 | None | In Progress |
-| 5 | Prove conformance with the vendored OpenAPI document | docs/plans/5-prove-conformance-with-the-vendored-openapi-document.md | EP-2, EP-3, EP-4 M1 | EP-4 | Not Started |
+| 4 | Bind the System One API with servant and servant-client | docs/plans/4-bind-the-system-one-api-with-servant-and-servant-client.md | EP-2, EP-3 | None | Complete |
+| 5 | Prove conformance with the vendored OpenAPI document | docs/plans/5-prove-conformance-with-the-vendored-openapi-document.md | EP-2, EP-3, EP-4 M1 | EP-4 | In Progress |
 | 6 | Prepare the first Hackage release of typesafe-hs | docs/plans/6-prepare-the-first-hackage-release-of-typesafe-hs.md | EP-4, EP-5 | None | Not Started |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
@@ -208,7 +208,7 @@ EP-1 also records which haskell-jitsurei patterns were adopted and which were de
 
 ## Progress
 
-Implementation started on 2026-10-24. EP-1 is complete (13 tests, Cabal/Nix builds and flake checks); EP-2 is complete (24 tests); EP-3 is complete (38 tests and Nix build); EP-4 is in progress. The user approved the current 21-schema baseline after the mandatory drift check. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
+Implementation started on 2026-10-24. EP-1 is complete (13 tests, Cabal/Nix builds and flake checks); EP-2 is complete (24 tests); EP-3 is complete (38 tests and Nix build); EP-4 is complete (46 tests and the loopback byte/error gate); EP-5 is in progress. The user approved the current 21-schema baseline after the mandatory drift check. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
 
 
 ## Surprises & Discoveries

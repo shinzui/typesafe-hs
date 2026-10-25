@@ -50,10 +50,12 @@ data Question
   | QuestionOther !Text !Object
   deriving stock (Generic, Eq, Show)
 
+-- | A yes/no question with optional instructions and criteria.
 data NoulQuestion = NoulQuestion
   {instructions :: !(Maybe Content), criteria :: !(Maybe NoulCriteria)}
   deriving stock (Generic, Eq, Show)
 
+-- | Optional descriptions for the true and false outcomes.
 data NoulCriteria = NoulCriteria
   {true :: !(Maybe Content), false :: !(Maybe Content)}
   deriving stock (Generic, Eq, Show)
@@ -63,13 +65,16 @@ data ChoiceQuestion = ChoiceQuestion
   {instructions :: !(Maybe Content), criteria :: !(Vector (Text, Maybe Content))}
   deriving stock (Generic, Eq, Show)
 
+-- | A rating question with ordered, nonempty score levels.
 data ScoreQuestion = ScoreQuestion
   {instructions :: !(Maybe Content), criteria :: !(NonEmpty Content)}
   deriving stock (Generic, Eq, Show)
 
+-- | An image localization question with optional instructions.
 data BoxQuestion = BoxQuestion {instructions :: !(Maybe Content)}
   deriving stock (Generic, Eq, Show)
 
+-- | Image formats declared by the specification.
 data ImageFormat = ImageFormatPng | ImageFormatJpg | ImageFormatJpeg
   deriving stock (Generic, Eq, Show, Enum, Bounded)
 
@@ -112,7 +117,7 @@ instance FromJSON SystemOneRequest where
       <$> o .: "model"
       <*> o .: "state"
       <*> (Vector.fromList . Map.toList <$> o .: "questions")
-      <*> o .:? "assets" .!= Map.empty
+      <*> o .:! "assets" .!= Map.empty
 
 instance ToJSON Question where
   toJSON (QuestionNoul q) = toJSON q
