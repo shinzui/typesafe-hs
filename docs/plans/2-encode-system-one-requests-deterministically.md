@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T03:32:09Z
       mode: "update"
       note: "Golden files listed under extra-source-files"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:36:01Z
+      mode: "implement"
+      note: "Implement ordered request codecs and golden acceptance tests"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -50,8 +55,8 @@ The governing requirements are R2, R3, R7, R8 and R11 in [docs/initial-spec.md](
 
 ## Progress
 
-- [ ] Milestone 1: `src/TypeSafe/Wire/Request.hs` defines every request type with `ToJSON` (hand-written `toEncoding`) and `FromJSON`, plus `encodeSystemOneRequest`, `duplicateQuestionNames` and `duplicateChoiceLabels`. The umbrella `TypeSafe.Wire` re-exports them. `cabal build all` succeeds with no warnings from the new module.
-- [ ] Milestone 2: the `TypeSafe.Wire.Request` tasty group passes under `cabal test`. It covers the R11 golden request (structural and exact bytes), determinism, declared order, the absent-versus-null rules, `QuestionOther` pass-through, duplicate reporting and decode of each question variant.
+- [x] Milestone 1: `src/TypeSafe/Wire/Request.hs` defines every request type with `ToJSON` (hand-written `toEncoding`) and `FromJSON`, plus `encodeSystemOneRequest`, `duplicateQuestionNames` and `duplicateChoiceLabels`. The umbrella `TypeSafe.Wire` re-exports them. `cabal build all` succeeds with no warnings from the new module.
+- [x] Milestone 2: the `TypeSafe.Wire.Request` tasty group passes under `cabal test`. It covers the R11 golden request (structural and exact bytes), determinism, declared order, the absent-versus-null rules, `QuestionOther` pass-through, duplicate reporting and decode of each question variant.
 
 
 ## Surprises & Discoveries
@@ -94,7 +99,7 @@ The governing requirements are R2, R3, R7, R8 and R11 in [docs/initial-spec.md](
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-24. The full suite passes 24 tests, including the structural and byte goldens, all published request examples, ordering, duplicates and unknown tags. Swapping top-level encoding keys made the byte golden fail; after restoring the encoder the suite passed. Optional non-nullable asset properties use .:! so explicit null is rejected.
 
 
 ## Context and Orientation

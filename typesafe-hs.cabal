@@ -5,7 +5,10 @@ synopsis: Wire types and servant client for the TypeSafe System One API
 category: AI, Web
 build-type: Simple
 tested-with: ghc ==9.12.4
-extra-source-files: spec/openapi.json
+extra-source-files:
+  spec/openapi.json
+  test/golden/baikai-request.bytes
+  test/golden/baikai-request.json
 
 common common
   default-language: GHC2024
@@ -25,12 +28,16 @@ library
   exposed-modules:
     TypeSafe.Wire
     TypeSafe.Wire.Common
+    TypeSafe.Wire.Request
 
   build-depends:
     aeson ^>=2.2,
     base >=4.20 && <5,
+    bytestring ^>=0.12,
+    containers ^>=0.7,
     http-types ^>=0.12,
     text ^>=2.1,
+    vector ^>=0.13,
 
 test-suite typesafe-hs-test
   import: common
@@ -40,6 +47,7 @@ test-suite typesafe-hs-test
   other-modules:
     TypeSafe.SpecVersionTest
     TypeSafe.Wire.CommonTest
+    TypeSafe.Wire.RequestTest
 
   default-extensions: MultilineStrings
   ghc-options:
@@ -51,6 +59,7 @@ test-suite typesafe-hs-test
     aeson,
     base,
     bytestring ^>=0.12,
+    containers,
     http-types,
     tasty >=1.4 && <1.6,
     tasty-hunit ^>=0.10,
