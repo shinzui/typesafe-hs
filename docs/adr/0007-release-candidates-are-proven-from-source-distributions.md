@@ -20,4 +20,4 @@ The owner chose BSD-3-Clause with Copyright (c) 2026 Nadeem Bitar for the initia
 
 ## Consequences
 
-A missing file, incompatible bound or unchosen license blocks release acceptance. Source and Nix builds remain useful independent checks. A preliminary build without an approved license is development evidence and cannot be promoted to a release candidate without rebuilding and checking the final tarball.
+A missing file, incompatible bound or unchosen license blocks release acceptance. Source and Nix builds remain useful independent checks. A preliminary build without an approved license is development evidence and cannot be promoted to a release candidate without rebuilding and checking the final tarball. Hackage publication can precede signed-index propagation: verify both direct package/documentation downloads and discovery through a fresh `cabal update` and `cabal info` before closing the release plan. If the configured HTTP endpoint retains older metadata after HTTPS has refreshed, verify with a temporary HTTPS configuration while preserving user settings. A stale index does not justify re-uploading an already published version.

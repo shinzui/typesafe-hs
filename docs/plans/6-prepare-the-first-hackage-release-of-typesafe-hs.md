@@ -53,7 +53,7 @@ After this plan, anyone can add `typesafe-hs ^>=0.1` to a Cabal file and `cabal`
 
 The first consumer is the `baikai-typesafe` provider in another repository, planned in `mori://shinzui/baikai/plans/84-deliver-the-typesafe-system-one-provider-and-judgment-catalog`. Baikai's release gate builds every source distribution in an isolated project that resolves dependencies from Hackage only. A `source-repository-package` pin pointing at this git repository is acceptable to Baikai during development, but not for its release. So until `typesafe-hs` is on Hackage, `baikai-typesafe` cannot be released.
 
-This plan turns the finished library into a release candidate and proves that candidate the way Baikai will consume it: from the source-distribution tarball, against Hackage alone, inside Baikai's dependency bounds. It then publishes the release, but only after the user explicitly confirms each outward-facing step.
+This plan turns the finished library into a release candidate and proves that candidate the way Baikai will consume it: from the source-distribution tarball, against Hackage alone, inside Baikai's dependency bounds. It then publishes the owner-approved release; the owner authorized the full remaining sequence on 2026-10-25.
 
 You can see it working in three ways:
 
@@ -64,14 +64,16 @@ You can see it working in three ways:
 
 ## Progress
 
-Resumed (2026-10-25): the owner selected BSD-3-Clause with Copyright (c) 2026 Nadeem Bitar. LICENSE and Cabal licensing metadata are added, and the initial release remains 0.1.0.0. The final licensed source distribution passes all 208 tests in an isolated Hackage-only project, cabal check is clean, and Nix build/check pass. The documentation archive is ready, with 100% Haddock coverage in all seven exposed modules. The owner approved the prepared version/changelog and instructed the agent to proceed with the full release on 2026-10-25. Publication is proceeding; token discovery is in progress.
+Completed 2026-10-25. The licensed source distribution and documentation are permanently published, the annotated release tag and GitHub release are live, and fresh Cabal discovery reports version 0.1.0.0. All three milestones and the initiative's final integration gate are accepted.
 
 - [x] Milestone 1 (2026-10-25): the package has the owner-approved BSD-3-Clause LICENSE, complete metadata, dated changelog and compiled README example. All 208 checkout tests pass. Every exposed module reports 100% Haddock coverage, and the Hackage documentation archive is generated with linked source and quickjump. `cabal check` reports no errors or warnings. The 0.1.0.0 source distribution includes the specification, all golden files, license and documentation.
 - [x] Milestone 2 (2026-10-25): the final BSD-3-Clause source distribution builds and passes all 208 tests in a fresh extracted-tarball project outside the checkout with Hackage only, Baikai's unchanged bounds, and no local warning flags or source pins. The latest Hackage index is 2026-10-25T11:15:27Z. Registry releases and consumer bounds were rechecked; the recorded bounds table remains current. `nix build` and `nix flake check` succeed.
-- [ ] Milestone 3: the package is published. With the user's confirmation at each step, the name is re-verified as free, a package candidate and its documentation are uploaded and reviewed, the release is published, and the tag `v0.1.0.0` is created and pushed. The user is given a short note for Baikai's maintainers.
+- [x] Milestone 3 (2026-10-25): the owner approved the prepared release; candidate and published archives match the validated digest. The package and all seven documentation pages return HTTP 200. Fresh `cabal update` and `cabal info typesafe-hs` report `Versions available: 0.1.0.0` through the HTTPS Hackage endpoint. Annotated tag `v0.1.0.0` is pushed and dereferences to release commit `f79344b9bb48ac49626b1065d7de255bea4b5464`; the GitHub release is live. The Baikai handoff below identifies the Hackage dependency and removal of the development pin.
 
 
 ## Surprises & Discoveries
+
+Permanent publication and direct downloads succeeded before the signed Hackage index included the package. An immediate fresh `cabal update` retained the pre-publication index-state and `cabal info typesafe-hs` could not find it. The gate subsequently passed through HTTPS at index-state 2026-10-25T11:40:23Z; the configured HTTP endpoint had retained an older snapshot. Use a temporary HTTPS configuration to verify fresh signed metadata without changing user settings. Do not re-upload an already published version.
 
 Cabal 3.16 treats a local tarball package as global-style: `cabal test all` reported no project components. Building the explicit package target proceeds, but the test gate now extracts the exact tarball in the scratch directory and names that extracted package directory in cabal.project. This preserves Hackage-only resolution and proves the distribution contents without reading this checkout.
 
@@ -137,8 +139,22 @@ Final release preparation resumed on 2026-10-25 after the owner selected BSD-3-C
 
 The exact source archive passed all 208 tests in a new extracted-tarball consumer project with Hackage as the only repository, Baikai's unchanged bounds, GHC 9.12.4, and the latest index at 2026-10-25T11:15:27Z. Its SHA-256 is `dfe95637953a2b7a973778720ac87bab48a77fcd966de4e1705267aedcb46c72`. The scratch project is `/var/folders/xf/z_902qyd0dg5m6n8pjv1vk300000gn/T/typesafe-hs-release-consumer-9vswpt5t`. It resolved current transitive releases including tls 2.4.13 and http2 5.4.10, demonstrating that it did not reuse a checkout-pinned solution. Nix build and both flake checks pass.
 
-The documentation archive `dist-newstyle/typesafe-hs-0.1.0.0-docs.tar.gz` is ready, with 100% Haddock coverage in all seven exposed modules. The owner has approved the concrete version/changelog and full release sequence. The configured token location is being resolved before upload. The package name remains available (HTTP 404). ADR 0007 now records the approved licensing, extracted-tarball test selection and released-source bounds checks. The completion distillation reviewed the MasterPlan and all five completed children; their durable wire, policy and conformance decisions are already captured in ADRs 0001–0006.
+The documentation archive `dist-newstyle/typesafe-hs-0.1.0.0-docs.tar.gz` is ready, with 100% Haddock coverage in all seven exposed modules. The owner approved the concrete version/changelog and full release sequence. The configured token authenticated the retry successfully. Candidate upload and all seven candidate documentation pages were verified; the candidate archive digest matched the isolated-build artifact. The exact archive and documentation were then permanently published at https://hackage.haskell.org/package/typesafe-hs-0.1.0.0. The published package and all seven module pages return HTTP 200, and the downloaded published archive has the validated SHA-256. Release commit `f79344b9bb48ac49626b1065d7de255bea4b5464` and annotated tag `v0.1.0.0` are pushed; the remote tag dereferences to that commit. GitHub release: https://github.com/shinzui/typesafe-hs/releases/tag/v0.1.0.0. Fresh Cabal discovery succeeded with index-state 2026-10-25T11:40:23Z and reports `Versions available: 0.1.0.0`. The initial HTTP endpoint lagged the HTTPS signed metadata; discovery used a generated temporary config with only its Hackage URL switched to HTTPS, leaving the owner's configuration untouched. The discovery directory is `/var/folders/xf/z_902qyd0dg5m6n8pjv1vk300000gn/T/typesafe-hs-published-discovery-f5hezkn5`. ADR 0007 now records the approved licensing, extracted-tarball test selection and released-source bounds checks. The completion distillation reviewed the MasterPlan and all five completed children; their durable wire, policy and conformance decisions are already captured in ADRs 0001–0006.
 
+
+Baikai handoff: `typesafe-hs 0.1.0.0` is available at https://hackage.haskell.org/package/typesafe-hs-0.1.0.0. The provider in `mori://shinzui/baikai/plans/84-deliver-the-typesafe-system-one-provider-and-judgment-catalog` can use `typesafe-hs ^>=0.1` and remove its development `source-repository-package` pin. The wire contract is described by `mori://shinzui/typesafe-hs`, project-relative path `docs/initial-spec.md` (artifact-level URI pending). No Baikai files were changed. Multipart image upload remains the separate, excluded follow-up in [plan 7](7-send-images-with-multipart-system-one-requests.md).
+
+Final discovery evidence from the fresh directory:
+
+```bash
+cabal --config-file cabal-https.config update
+cabal --config-file cabal-https.config info typesafe-hs
+```
+
+```text
+The index-state is set to 2026-10-25T11:40:23Z.
+Versions available: 0.1.0.0
+```
 
 ## Context and Orientation
 
@@ -242,12 +258,12 @@ At the end of Milestone 1, `cabal check` is clean, `cabal test` passes (includin
 **Milestone 3: publish the approved release.** The owner's 2026-10-25 instruction to proceed authorizes this entire sequence. The earlier per-step confirmation workflow is superseded for this release; do not ask again for already authorized candidate upload, publication, tagging/pushing or GitHub release.
 
 1. **Re-check that the name is free.** If it has been taken, stop and ask the user to choose a new name. A new name would also touch `mori.dhall`, `nix/haskell.nix` and the MasterPlan.
-2. **Upload the candidate.** Upload the package candidate and its documentation. Ask the user to review the candidate page, including the rendered README, the module list and the documentation, and to confirm.
+2. **Upload the candidate.** Upload the package candidate and its documentation. Review the candidate page, including the rendered README, module list and documentation, before completing the owner-authorized publication.
 3. **Publish.** Publish the package and its documentation. Hackage authentication is interactive or token-based. When the agent cannot authenticate, ask the user to run the command with the `!` prefix so that its output lands in the session. A brand-new package needs a Hackage account with upload rights. If the upload is refused with a permissions error, tell the user; that is an account matter, not a packaging defect.
-4. **Tag and push.** Create the annotated tag `v0.1.0.0` on the release commit. Push it only after confirmation.
+4. **Tag and push.** Create the annotated tag `v0.1.0.0` on the release commit. Push it under the owner's release authorization.
 5. **Hand off to Baikai.** Give the user a short note for Baikai's maintainers. It states that `typesafe-hs 0.1.0.0` is on Hackage, so the `source-repository-package` stanza used during development can be removed. It cites the provider plan `mori://shinzui/baikai/plans/84-deliver-the-typesafe-system-one-provider-and-judgment-catalog`, the requirements in `mori://shinzui/typesafe-hs` at project-relative path `docs/initial-spec.md` (artifact-level URI pending), and the Hackage URL. Do not edit the Baikai repository.
 
-**After publishing.** Mark this plan Complete in the MasterPlan registry, then do the ADR distillation pass. The durable lesson is the release gate: a release candidate is proven from its source distribution against Hackage only, inside the first consumer's bounds, and every Hackage-visible step requires the owner's confirmation. If that lesson is not already recorded in `docs/adr/`, add it as a new record following the corpus convention (`docs/adr/NNNN-slug.md` with `title`, `status` and `date` frontmatter).
+**After publishing.** Mark this plan Complete in the MasterPlan registry, then do the ADR distillation pass. The durable lesson is the release gate: a release candidate is proven from its source distribution against Hackage only, inside the first consumer's bounds, and every Hackage-visible step requires owner authorization, which may cover the full concrete release. If that lesson is not already recorded in `docs/adr/`, add it as a new record following the corpus convention (`docs/adr/NNNN-slug.md` with `title`, `status` and `date` frontmatter).
 
 
 ## Concrete Steps
@@ -333,7 +349,7 @@ nix flake check
 
 Expected: both exit 0, and `./result` exists.
 
-**Milestone 3.** Each block below runs only after the user has confirmed that step.
+**Milestone 3.** The owner authorized this sequence on 2026-10-25; no further per-step confirmation is needed.
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://hackage.haskell.org/package/typesafe-hs
@@ -348,14 +364,14 @@ cabal upload dist-newstyle/sdist/typesafe-hs-0.1.0.0.tar.gz
 cabal upload --documentation dist-newstyle/typesafe-hs-0.1.0.0-docs.tar.gz
 ```
 
-The user reviews https://hackage.haskell.org/package/typesafe-hs-0.1.0.0/candidate. After a separate confirmation, publish:
+The user reviews https://hackage.haskell.org/package/typesafe-hs-0.1.0.0/candidate. Under the owner's release authorization, publish:
 
 ```bash
 cabal upload --publish dist-newstyle/sdist/typesafe-hs-0.1.0.0.tar.gz
 cabal upload --publish --documentation dist-newstyle/typesafe-hs-0.1.0.0-docs.tar.gz
 ```
 
-Then tag. After yet another confirmation, push the tag:
+Then tag and push under the same release authorization:
 
 ```bash
 git tag -a v0.1.0.0 -m "typesafe-hs 0.1.0.0"
@@ -465,6 +481,6 @@ Revision note (2026-10-21): aligned with the haskell-jitsurei change set and the
 
 Revision note (2026-10-22): after the MasterPlan review, the Hackage facts name servant-client-core 0.20.3.0 as the newest release and mark the local servant checkout as ahead of Hackage, `http-client` is reviewed on the same condition as `servant-client-core`, and `TypeSafe.V1` is no longer described as re-enabling `FieldSelectors`.
 
-Revision note (2026-10-25): record owner-approved licensing, refresh registry and consumer-bound checks, and accept the final licensed archive consumer build; publication awaits authentication and the requested release approvals.
+Revision note (2026-10-25): record owner-approved licensing and the complete release authorization, accept the licensed archive consumer build, publish package/documentation and GitHub release, verify the remote tag and fresh HTTPS Cabal discovery, and complete the initiative. Distill signed-index propagation into ADR 0007.
 
 Revision note (2026-10-24): implement the approved 21-schema surface, package a compiled README example, review current registry releases and upstream tags, and test extracted tarball contents because Cabal 3.16 does not select tests from global-style tarball targets. License selection and external release approvals remain pending.

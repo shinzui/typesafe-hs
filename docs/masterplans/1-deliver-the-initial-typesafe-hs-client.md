@@ -109,7 +109,7 @@ That is why this library must surface raw `ClientError` and status codes without
 | 3 | Decode System One responses, model listings and error bodies | docs/plans/3-decode-system-one-responses-model-listings-and-error-bodies.md | EP-1 | None | Complete |
 | 4 | Bind the System One API with servant and servant-client | docs/plans/4-bind-the-system-one-api-with-servant-and-servant-client.md | EP-2, EP-3 | None | Complete |
 | 5 | Prove conformance with the vendored OpenAPI document | docs/plans/5-prove-conformance-with-the-vendored-openapi-document.md | EP-2, EP-3, EP-4 M1 | EP-4 | Complete |
-| 6 | Prepare the first Hackage release of typesafe-hs | docs/plans/6-prepare-the-first-hackage-release-of-typesafe-hs.md | EP-4, EP-5 | None | In Progress |
+| 6 | Prepare the first Hackage release of typesafe-hs | docs/plans/6-prepare-the-first-hackage-release-of-typesafe-hs.md | EP-4, EP-5 | None | Complete |
 
 Status values: Not Started, In Progress, Complete, Cancelled.
 Hard Deps and Soft Deps reference other rows by their # prefix (e.g., EP-1, EP-3).
@@ -213,10 +213,12 @@ EP-1 also records which haskell-jitsurei patterns were adopted and which were de
 
 ## Progress
 
-Implementation started on 2026-10-24. EP-1 is complete (13 tests, Cabal/Nix builds and flake checks); EP-2 is complete (24 tests); EP-3 is complete (38 tests and Nix build); EP-4 is complete (46 tests and the loopback byte/error gate); EP-5 is complete (206 tests and four manual drift mutations); EP-6 has passed 208 tests, 100% public Haddock coverage, Nix checks and a preliminary Hackage-only extracted-tarball build, but remains In Progress: the owner selected BSD-3-Clause with Copyright (c) 2026 Nadeem Bitar on 2026-10-25; the final licensed archive passes all 208 tests in the Hackage-only consumer project, cabal check is clean, and Nix build/check pass. The Hackage documentation archive is ready with 100% public Haddock coverage. The owner approved the concrete release and instructed publication on 2026-10-25; the remaining release sequence is now authorized. The user approved the current 21-schema baseline after the mandatory drift check. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
+Completed 2026-10-25. All six child ExecPlans are Complete. The loopback byte-equality/error gate and final Hackage-only source-distribution consumer gate pass; all 208 tests pass, all seven exposed modules have 100% Haddock coverage, and Cabal packaging and Nix checks are clean. Version 0.1.0.0 and its documentation are published on Hackage, the annotated tag and GitHub release are live, and fresh Cabal discovery reports 0.1.0.0. No integration gate remains. Multipart uploads remain outside this initiative in standalone plan 7.
 
 
 ## Surprises & Discoveries
+
+- **Publication precedes signed-index propagation.** The source and documentation were already downloadable when a fresh Cabal index still predated publication. The HTTPS endpoint subsequently supplied index-state 2026-10-25T11:40:23Z and Cabal discovered 0.1.0.0; the owner's HTTP configuration had retained older metadata. EP-6 accepted the gate using a temporary HTTPS config. ADR 0007 preserves this distinction.
 
 - **2026-10-24 baseline update, approved by the user.** The freshly fetched document still reports `0.2.0`, but now has 21 schemas: `HTTPBadRequestError` was added, with required `detail` accepting a string or arbitrary object. Both endpoints now document HTTP 400 using it. `ValidationError.input` is now a string preview rather than arbitrary JSON, so EP-3 uses `Maybe Text` and rejects explicit null. The normalized SHA-256 is `14bfe394955d2f31dfb653a1b18dd561c8da4d12677915a10fcc8c62e0fcbcc3`. EP-3 owns its wire codec; EP-5 binds the additional schema and HTTP 400 response references. JSON-only request scope and raw `ClientError` behavior remain the accepted design.
 
@@ -318,6 +320,10 @@ listModels = routesIO.models "Bearer test"   -- compiles and runs
 
 ## Outcomes & Retrospective
 
-EP-1 through EP-5 are complete. All wire types, deterministic codecs, error fallbacks, NamedRoutes client and schema/operation conformance are implemented and committed. The loopback gate passed. EP-6 has completed its independent preparation and preliminary consumer proof; the owner-approved BSD-3-Clause source archive has passed final consumer validation and the documentation archive is ready. The owner approved the concrete release and the remaining publication/tag/push sequence; publication is in progress. ADRs 0001–0007 preserve the durable context distilled from the child plans. The initiative is not complete until the release gate is satisfied.
+Completed 2026-10-25. The initial client implements the approved 21-schema OpenAPI 0.2.0 baseline with deterministic requests, lossless response/error codecs, a policy-free NamedRoutes client, generated conformance and loopback tests. All 208 tests pass in both the checkout and the final source-distribution consumer build against Hackage only and Baikai's constraints. BSD-3-Clause licensing is owner-approved, package checks and Nix checks pass, and every exposed module has full Haddock coverage.
+
+The release is available at https://hackage.haskell.org/package/typesafe-hs-0.1.0.0 with documentation. The published source digest matches the validated tarball. Fresh Cabal discovery reports 0.1.0.0. Annotated tag `v0.1.0.0` points to release commit `f79344b9bb48ac49626b1065d7de255bea4b5464`, and the GitHub release is https://github.com/shinzui/typesafe-hs/releases/tag/v0.1.0.0. The first consumer can replace its development source pin with the Hackage dependency; EP-6 records the canonical Baikai handoff.
+
+The completion distillation reviewed this MasterPlan and every child plan's decisions, discoveries and outcomes. ADRs 0001–0007 preserve the durable policy boundary, wire mapping, JSON-only scope, Haskell conventions, fail-closed conformance and source-distribution release proof. ADR 0007 also records the licensed release and signed-index propagation check. No work remains within this initiative; multipart image upload stays in standalone plan 7.
 
 Revision note (2026-10-22): applied the findings of the 2026-10-22 review. `-Werror=` flags are confined to `cabal.project`; `TypeSafe.V1` no longer re-enables `FieldSelectors`, after the record-dot premise was refuted and the haskell-jitsurei pattern corrected; Integration Points now name the owners of `extra-source-files` entries, EP-5's shared document loader and the test-module naming convention; EP-3's `time` bound follows Baikai's. EP-6's Hackage facts and EP-4's servant checkout paths were corrected in the children.
