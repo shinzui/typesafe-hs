@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T03:32:09Z
       mode: "update"
       note: "time bound ^>=1.14, explicit response key orders, Test-suffixed module names"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:38:46Z
+      mode: "implement"
+      note: "Implement lossless response, model and current 21-schema error codecs"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -63,14 +68,14 @@ This plan implements requirements R4, R5, R6, R9 and the response half of R11 fr
 
 ## Progress
 
-- [ ] Milestone 1: `TypeSafe.Wire.Response` decodes and encodes success bodies. Acceptance: Baikai's response golden decodes to the expected values; the copies without `confidence` or `score` fail; `1e400` survives; a fractional token count fails; an unknown answer tag decodes to `AnswerOther` and re-encodes unchanged.
-- [ ] Milestone 2: `TypeSafe.Wire.Models` decodes and encodes the model listing. Acceptance: the listing decodes with an extra unknown field present, `releaseDay` parses `2026-09-15`, and a missing `release_date` fails.
-- [ ] Milestone 3: `TypeSafe.Wire.Error` has codecs for the 422 body, and `parseErrorBody` classifies every observed error form. Acceptance: each form below decodes to its expected constructor, with no status-code mapping anywhere. The full suite and `nix build` pass.
+- [x] Milestone 1: `TypeSafe.Wire.Response` decodes and encodes success bodies. Acceptance: Baikai's response golden decodes to the expected values; the copies without `confidence` or `score` fail; `1e400` survives; a fractional token count fails; an unknown answer tag decodes to `AnswerOther` and re-encodes unchanged.
+- [x] Milestone 2: `TypeSafe.Wire.Models` decodes and encodes the model listing. Acceptance: the listing decodes with an extra unknown field present, `releaseDay` parses `2026-09-15`, and a missing `release_date` fails.
+- [x] Milestone 3: `TypeSafe.Wire.Error` has codecs for the 422 body, and `parseErrorBody` classifies every observed error form. Acceptance: each form below decodes to its expected constructor, with no status-code mapping anywhere. The full suite and `nix build` pass.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+The user approved the freshly fetched 21-schema baseline on 2026-10-24. It adds HTTPBadRequestError (required detail: string or arbitrary object) and narrows ValidationError.input from arbitrary JSON to an optional string preview. Implement input as Maybe Text, rejecting explicit null or non-strings; this supersedes the older Maybe Value/null-preservation instructions below. Error-body parsing retains its existing shape dispatch and raw fallback. Bind HTTPBadRequestError with BadRequestDetailText/BadRequestDetailObject and both codecs.
 
 
 ## Decision Log
@@ -137,7 +142,7 @@ This plan implements requirements R4, R5, R6, R9 and the response half of R11 fr
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-24. All 38 tests pass with the full request and response surface. Nix builds successfully with the same suite. Both negative goldens fail, 1e400 stays Scientific, fractional/out-of-range counts fail, nullable box confidence remains required, and malformed error arrays fall back to complete raw JSON. The approved baseline narrows input to text and adds the HTTPBadRequestError union. These durable rules are captured in ADR 0003.
 
 
 ## Context and Orientation
@@ -360,7 +365,7 @@ Create `src/TypeSafe/Wire/Error.hs` with:
   - Decoding a string gives a field.
   - Decoding an integral number that fits an `Int` gives an index, using `parseBoundedIntegral`.
   - Anything else fails.
-- `ValidationError { loc :: !(Vector LocationSegment), msg :: !Text, type_ :: !Text, input :: !(Maybe Value), ctx :: !(Maybe Object) }`. The JSON key of `type_` is `type`, and `input` follows the direct-lookup rule in the Decision Log.
+- `ValidationError { loc :: !(Vector LocationSegment), msg :: !Text, type_ :: !Text, input :: !(Maybe Text), ctx :: !(Maybe Object) }`. The JSON key of `type_` is `type`, and `input` follows the direct-lookup rule in the Decision Log.
 - `HTTPValidationError { detail :: !(Maybe (Vector ValidationError)) }`.
 - `ErrorDetail { errorType :: !(Maybe Text), message :: !Text }`. The JSON key of `errorType` is `error_type`.
 - The `ErrorBody` sum:
@@ -587,7 +592,7 @@ data LocationSegment = LocationField !Text | LocationIndex !Int
   deriving stock (Generic, Eq, Show)
 data ValidationError = ValidationError
   { loc :: !(Vector LocationSegment), msg :: !Text, type_ :: !Text
-  , input :: !(Maybe Value), ctx :: !(Maybe Object) }
+  , input :: !(Maybe Text), ctx :: !(Maybe Object) }
   deriving stock (Generic, Eq, Show)
 data HTTPValidationError = HTTPValidationError { detail :: !(Maybe (Vector ValidationError)) }
   deriving stock (Generic, Eq, Show)

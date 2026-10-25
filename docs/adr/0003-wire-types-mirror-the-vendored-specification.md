@@ -16,4 +16,6 @@ Bind every schema with plain strict fields, snake case converted to lower camel 
 
 ## Consequences
 
+The approved 2026-10-24 baseline makes ValidationError.input an optional text preview, so its field is Maybe Text and rejects explicit null. HTTPBadRequestError uses a string-or-object detail union. Optional non-nullable properties reject null instead of treating it as absence.
+
 Consumers can use generic-lens without a library lens dependency. Schema constraints are tested independently; deterministic encoders preserve question and choice vector order. Decoded object order is unspecified.

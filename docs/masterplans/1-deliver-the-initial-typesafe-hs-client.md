@@ -101,8 +101,8 @@ That is why this library must surface raw `ClientError` and status codes without
 |---|-------|------|-----------|-----------|--------|
 | 1 | Scaffold the package and vendor the System One specification | docs/plans/1-scaffold-the-package-and-vendor-the-system-one-specification.md | None | None | Complete |
 | 2 | Encode System One requests deterministically | docs/plans/2-encode-system-one-requests-deterministically.md | EP-1 | None | Complete |
-| 3 | Decode System One responses, model listings and error bodies | docs/plans/3-decode-system-one-responses-model-listings-and-error-bodies.md | EP-1 | None | In Progress |
-| 4 | Bind the System One API with servant and servant-client | docs/plans/4-bind-the-system-one-api-with-servant-and-servant-client.md | EP-2, EP-3 | None | Not Started |
+| 3 | Decode System One responses, model listings and error bodies | docs/plans/3-decode-system-one-responses-model-listings-and-error-bodies.md | EP-1 | None | Complete |
+| 4 | Bind the System One API with servant and servant-client | docs/plans/4-bind-the-system-one-api-with-servant-and-servant-client.md | EP-2, EP-3 | None | In Progress |
 | 5 | Prove conformance with the vendored OpenAPI document | docs/plans/5-prove-conformance-with-the-vendored-openapi-document.md | EP-2, EP-3, EP-4 M1 | EP-4 | Not Started |
 | 6 | Prepare the first Hackage release of typesafe-hs | docs/plans/6-prepare-the-first-hackage-release-of-typesafe-hs.md | EP-4, EP-5 | None | Not Started |
 
@@ -208,12 +208,12 @@ EP-1 also records which haskell-jitsurei patterns were adopted and which were de
 
 ## Progress
 
-Implementation started on 2026-10-24. EP-1 is complete (13 tests, Cabal/Nix builds and flake checks); EP-2 is complete (24 tests); EP-3 is in progress. The user approved the current 21-schema baseline after the mandatory drift check. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
+Implementation started on 2026-10-24. EP-1 is complete (13 tests, Cabal/Nix builds and flake checks); EP-2 is complete (24 tests); EP-3 is complete (38 tests and Nix build); EP-4 is in progress. The user approved the current 21-schema baseline after the mandatory drift check. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
 
 
 ## Surprises & Discoveries
 
-- **2026-10-24 baseline update, approved by the user.** The freshly fetched document still reports `0.2.0`, but now has 21 schemas: `HTTPBadRequestError` was added, with required `detail` accepting a string or arbitrary object. Both endpoints now document HTTP 400 using it. The normalized SHA-256 is `14bfe394955d2f31dfb653a1b18dd561c8da4d12677915a10fcc8c62e0fcbcc3`. EP-3 owns its wire codec; EP-5 binds the additional schema and HTTP 400 response references. JSON-only request scope and raw `ClientError` behavior remain the accepted design.
+- **2026-10-24 baseline update, approved by the user.** The freshly fetched document still reports `0.2.0`, but now has 21 schemas: `HTTPBadRequestError` was added, with required `detail` accepting a string or arbitrary object. Both endpoints now document HTTP 400 using it. `ValidationError.input` is now a string preview rather than arbitrary JSON, so EP-3 uses `Maybe Text` and rejects explicit null. The normalized SHA-256 is `14bfe394955d2f31dfb653a1b18dd561c8da4d12677915a10fcc8c62e0fcbcc3`. EP-3 owns its wire codec; EP-5 binds the additional schema and HTTP 400 response references. JSON-only request scope and raw `ClientError` behavior remain the accepted design.
 
 - **The published OpenAPI document has drifted since `docs/initial-spec.md` was written, without a version bump.** Both the published copy, fetched 2026-10-21, and the reference copy in the community SDK (`mori://byteally/typesafe-sdk/packages/typesafe-ai-core`, project-relative path `typesafe-sdk/typesafe-ai-core/spec/openapi.json`, artifact-level URI pending) report `info.version` `0.2.0`. The published copy adds:
   - the schemas `BoxQuestion`, `BoxAnswer`, `BoxCoordinates` and `Asset`;

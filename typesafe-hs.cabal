@@ -9,6 +9,9 @@ extra-source-files:
   spec/openapi.json
   test/golden/baikai-request.bytes
   test/golden/baikai-request.json
+  test/golden/baikai-response-missing-confidence.json
+  test/golden/baikai-response-missing-score.json
+  test/golden/baikai-response.json
 
 common common
   default-language: GHC2024
@@ -28,15 +31,21 @@ library
   exposed-modules:
     TypeSafe.Wire
     TypeSafe.Wire.Common
+    TypeSafe.Wire.Error
+    TypeSafe.Wire.Models
     TypeSafe.Wire.Request
+    TypeSafe.Wire.Response
 
+  other-modules: TypeSafe.Wire.Internal.Number
   build-depends:
     aeson ^>=2.2,
     base >=4.20 && <5,
     bytestring ^>=0.12,
     containers ^>=0.7,
     http-types ^>=0.12,
+    scientific ^>=0.3,
     text ^>=2.1,
+    time ^>=1.14,
     vector ^>=0.13,
 
 test-suite typesafe-hs-test
@@ -48,6 +57,7 @@ test-suite typesafe-hs-test
     TypeSafe.SpecVersionTest
     TypeSafe.Wire.CommonTest
     TypeSafe.Wire.RequestTest
+    TypeSafe.Wire.ResponseTest
 
   default-extensions: MultilineStrings
   ghc-options:
@@ -61,8 +71,10 @@ test-suite typesafe-hs-test
     bytestring ^>=0.12,
     containers,
     http-types,
+    scientific,
     tasty >=1.4 && <1.6,
     tasty-hunit ^>=0.10,
     text,
+    time,
     typesafe-hs,
     vector ^>=0.13,
