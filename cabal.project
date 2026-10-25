@@ -4,6 +4,7 @@ tests: True
 package typesafe-hs
   ghc-options:
     -Werror=missing-fields
+    -Werror=incomplete-patterns
     -Wcompat
     -Widentities
     -Wincomplete-record-updates

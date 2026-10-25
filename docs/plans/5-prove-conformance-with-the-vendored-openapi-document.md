@@ -22,6 +22,11 @@ provenance:
       at: 2026-10-22T03:32:09Z
       mode: "update"
       note: "Move -Werror=incomplete-patterns to cabal.project; read routes with record dot; rename test modules to SchemaTest and OperationsTest"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T04:44:13Z
+      mode: "implement"
+      note: "Implement fail-closed OpenAPI conformance for the approved 21 schemas"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -56,15 +61,17 @@ This is requirement R10 of [docs/initial-spec.md](../initial-spec.md). It is chi
 
 ## Progress
 
-- [ ] Milestone 1: schema reader, validator and audits of the document's own vocabulary. The conformance group passes against the vendored document. The audit reports an injected unknown keyword (`pattern`) and an unlisted content type, and this is checked both by permanent meta-tests and by a manual run against a mutated copy.
-- [ ] Milestone 2: `Arbitrary` generators and per-schema codec checks for every schema. These cover validation of encoded values, `toEncoding`/`toJSON` agreement, round trips, emitted properties, required/optional removal and the property-to-field table.
-- [ ] Milestone 3: discriminator, unknown-tag, example and constant checks. Constructors match both discriminator mappings, including `box`. Property-level and operation-level examples validate, decode and re-encode. The base URL and paths constants match the document.
-- [ ] Milestone 4: operation binding, which requires EP-4 M1. Every `(method, path)` in the document is produced by the servant client of `TypeSafe.V1.API`. Each request carries the declared bearer security and header parameters with the `application/json` content type, and each canned example response decodes.
+- [x] Milestone 1: schema reader, validator and audits of the document's own vocabulary. The conformance group passes against the vendored document. The audit reports an injected unknown keyword (`pattern`) and an unlisted content type, and this is checked both by permanent meta-tests and by a manual run against a mutated copy.
+- [x] Milestone 2: `Arbitrary` generators and per-schema codec checks for every schema. These cover validation of encoded values, `toEncoding`/`toJSON` agreement, round trips, emitted properties, required/optional removal and the property-to-field table.
+- [x] Milestone 3: discriminator, unknown-tag, example and constant checks. Constructors match both discriminator mappings, including `box`. Property-level and operation-level examples validate, decode and re-encode. The base URL and paths constants match the document.
+- [x] Milestone 4: operation binding, which requires EP-4 M1. Every `(method, path)` in the document is produced by the servant client of `TypeSafe.V1.API`. Each request carries the declared bearer security and header parameters with the `application/json` content type, and each canned example response decodes.
 
 
 ## Surprises & Discoveries
 
-(None yet.)
+Servant renders JSON as application/json;charset=utf-8; operation capture checks that concrete media type while the document content audit binds application/json.
+
+The user approved the current 21-schema baseline on 2026-10-24. Bind HTTPBadRequestError and its required string-or-object detail; ValidationError.input is an optional text preview. The older arbitrary-JSON input expectations are superseded. Schema milestones start after EP-2/EP-3 acceptance while the operation capture waits for EP-4 M1, as the MasterPlan explicitly permits.
 
 
 ## Decision Log
@@ -102,7 +109,7 @@ This is requirement R10 of [docs/initial-spec.md](../initial-spec.md). It is chi
 
 ## Outcomes & Retrospective
 
-(To be filled during and after implementation.)
+Completed 2026-10-24. All 206 tests pass, including 21 schema groups, field getters, generated encodings, required/optional removals, examples, discriminators and captured NamedRoutes operations. Manual override runs with pattern, FooBar, application/x-msgpack and GET /v1/usage all failed naming the inserted feature. Making ChoiceAnswer.confidence optional made its conformance group fail; the restored codec passes. ADR 0006 preserves the fail-closed audits, JSON-value round-trip rule and explicit multipart exclusion.
 
 
 ## Context and Orientation
@@ -118,20 +125,20 @@ It has two operations:
 - **`GET /v1/models`:**
   - security `[{"HTTPBearer": []}]`;
   - no parameters;
-  - responses `200` (`application/json`, schema `ModelMetadataList`) and `422` (`application/json`).
+  - responses `200` (`application/json`, schema `ModelMetadataList`) and `400`/`422` (`application/json`, schemas `HTTPBadRequestError`/`HTTPValidationError`).
 - **`POST /v1/systemone`:**
   - security `[{"HTTPBearer": []}]`;
   - two optional header parameters, `TypeSafe-Danger-Zone-Images` and `TypeSafe-Danger-Zone-Long-Context`, each with schema `{"type": "string", "enum": ["true"]}`;
   - a request body offered as `application/json` (schema `SystemOneRequest`, with named `examples` `box`, `choice`, `noul` and `score`) and as `multipart/form-data`;
-  - responses `200` (`application/json`, schema `SystemOneResponse`, named `examples` `box`, `choice`, `noul` and `score`) and `422` (`application/json`, schema `HTTPValidationError`, no examples).
+  - responses `200` (`application/json`, schema `SystemOneResponse`, named `examples` `box`, `choice`, `noul` and `score`) and `400`/`422` (`application/json`, schemas `HTTPBadRequestError`/`HTTPValidationError`, no examples).
 
 `components.securitySchemes.HTTPBearer` is `{"type": "http", "scheme": "bearer"}`.
 
-**Schemas.** There are 20 schemas under `components.schemas`:
+**Schemas.** There are 21 schemas under `components.schemas`:
 
 ```text
 Answer Asset BoxAnswer BoxCoordinates BoxQuestion ChoiceAnswer ChoiceQuestion
-HTTPValidationError ModelMetadata ModelMetadataList NoulAnswer NoulCriteria
+HTTPBadRequestError HTTPValidationError ModelMetadata ModelMetadataList NoulAnswer NoulCriteria
 NoulQuestion Question ScoreAnswer ScoreQuestion SystemOneRequest
 SystemOneResponse Usage ValidationError
 ```
@@ -365,7 +372,7 @@ data RoundTrip = ExactRoundTrip | JsonRoundTrip
 data FieldBinding a = FieldBinding Text (a -> Maybe Value)
 ```
 
-It has one row for each of the 20 schemas. `Question` and `Answer` are bound to the union types with no field rows. Every object schema lists one `FieldBinding` per property, except the discriminator `type` of a variant record and `Asset`'s constant `type`, which are implied. For example:
+It has one row for each of the 21 schemas. `Question` and `Answer` are bound to the union types with no field rows. Every object schema lists one `FieldBinding` per property, except the discriminator `type` of a variant record and `Asset`'s constant `type`, which are implied. For example:
 
 ```haskell
 Binding "ChoiceAnswer" (Proxy @ChoiceAnswer) ExactRoundTrip
@@ -418,7 +425,7 @@ Add to `test/TypeSafe/Conformance/SchemaTest.hs`:
 - **Property-level examples.** For each object schema, as in the community SDK: when every required property has an `examples` entry, the object assembled from the first example of each property validates against the schema and decodes. Also check that each property example on its own validates against that property's schema.
 - **Operation-level examples.** For each entry of `operationExamples`:
   - it validates against the media object's schema;
-  - a request example decodes as `SystemOneRequest`, a `200` response example as `SystemOneResponse` or `ModelMetadataList` as the schema's `$ref` says, and any other status as `HTTPValidationError`;
+  - a request example decodes as `SystemOneRequest`, a `200` response example as `SystemOneResponse` or `ModelMetadataList` as the schema's `$ref` says, and other statuses according to their schema reference (`HTTPBadRequestError` for 400 and `HTTPValidationError` for 422);
   - `toJSON` of the decoded value equals the example. The examples contain no explicit `null`s or unknown keys, so equality is exact.
 
   This covers the `box` request example, with its inline `data_base64` asset and `jev-preview` model, and the `box` response example, whose `confidence` is `null`.
@@ -539,7 +546,7 @@ The plan is accepted when all of the following hold on a clean checkout:
 
 - **The full suite passes.** `nix develop -c cabal test typesafe-hs-test` passes, and the `OpenAPI conformance` group contains:
   - the three audits and their meta-tests;
-  - one schema group for each of the 20 schemas;
+  - one schema group for each of the 21 schemas;
   - the discriminator, unknown-tag, example and constant tests;
   - the operation-binding tests.
 - **An unknown keyword fails the suite.** Running with `TYPESAFE_OPENAPI_SPEC` pointed at a copy containing an unknown keyword fails and names the keyword. This is R10's "a failure must be a test failure, not a silent pass", and the in-memory meta-test keeps it permanently true.
