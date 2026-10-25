@@ -26,6 +26,11 @@ provenance:
       at: 2026-10-25T04:34:34Z
       mode: "implement"
       note: "Implement the approved 21-schema baseline and initial client"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T11:31:49Z
+      mode: "implement"
+      note: "Resume the initial release with owner-approved licensing"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -208,7 +213,7 @@ EP-1 also records which haskell-jitsurei patterns were adopted and which were de
 
 ## Progress
 
-Implementation started on 2026-10-24. EP-1 is complete (13 tests, Cabal/Nix builds and flake checks); EP-2 is complete (24 tests); EP-3 is complete (38 tests and Nix build); EP-4 is complete (46 tests and the loopback byte/error gate); EP-5 is complete (206 tests and four manual drift mutations); EP-6 has passed 208 tests, 100% public Haddock coverage, Nix checks and a preliminary Hackage-only extracted-tarball build, but remains In Progress: the owner license/copyright question is pending, so the final licensed candidate and publication gates are not accepted. The user approved the current 21-schema baseline after the mandatory drift check. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
+Implementation started on 2026-10-24. EP-1 is complete (13 tests, Cabal/Nix builds and flake checks); EP-2 is complete (24 tests); EP-3 is complete (38 tests and Nix build); EP-4 is complete (46 tests and the loopback byte/error gate); EP-5 is complete (206 tests and four manual drift mutations); EP-6 has passed 208 tests, 100% public Haddock coverage, Nix checks and a preliminary Hackage-only extracted-tarball build, but remains In Progress: the owner selected BSD-3-Clause with Copyright (c) 2026 Nadeem Bitar on 2026-10-25; the final licensed archive passes all 208 tests in the Hackage-only consumer project, cabal check is clean, and Nix build/check pass. The Hackage documentation archive is ready with 100% public Haddock coverage. The owner approved the concrete release and instructed publication on 2026-10-25; the remaining release sequence is now authorized. The user approved the current 21-schema baseline after the mandatory drift check. There are no integration gates beyond those owned by EP-4 (the loopback byte-equality check) and EP-6 (the Hackage-only consumer build and upload).
 
 
 ## Surprises & Discoveries
@@ -313,6 +318,6 @@ listModels = routesIO.models "Bearer test"   -- compiles and runs
 
 ## Outcomes & Retrospective
 
-EP-1 through EP-5 are complete. All wire types, deterministic codecs, error fallbacks, NamedRoutes client and schema/operation conformance are implemented and committed. The loopback gate passed. EP-6 has completed its independent preparation and preliminary consumer proof; licensing and the subsequent final-candidate and publication approvals remain. ADRs 0001–0007 preserve the durable context distilled from the child plans. The initiative is not complete until the release gate is satisfied.
+EP-1 through EP-5 are complete. All wire types, deterministic codecs, error fallbacks, NamedRoutes client and schema/operation conformance are implemented and committed. The loopback gate passed. EP-6 has completed its independent preparation and preliminary consumer proof; the owner-approved BSD-3-Clause source archive has passed final consumer validation and the documentation archive is ready. The owner approved the concrete release and the remaining publication/tag/push sequence; publication is in progress. ADRs 0001–0007 preserve the durable context distilled from the child plans. The initiative is not complete until the release gate is satisfied.
 
 Revision note (2026-10-22): applied the findings of the 2026-10-22 review. `-Werror=` flags are confined to `cabal.project`; `TypeSafe.V1` no longer re-enables `FieldSelectors`, after the record-dot premise was refuted and the haskell-jitsurei pattern corrected; Integration Points now name the owners of `extra-source-files` entries, EP-5's shared document loader and the test-module naming convention; EP-3's `time` bound follows Baikai's. EP-6's Hackage facts and EP-4's servant checkout paths were corrected in the children.

@@ -27,6 +27,11 @@ provenance:
       at: 2026-10-25T04:50:52Z
       mode: "implement"
       note: "Prepare documented source distribution and isolated consumer validation"
+    - model: "gpt-6.1-sol"
+      harness: "codex-cli"
+      at: 2026-10-25T11:31:49Z
+      mode: "implement"
+      note: "Apply owner-approved BSD-3-Clause licensing and validate the initial release"
   reviews:
     - model: "claude-fable-5-1"
       harness: "claude-code"
@@ -59,10 +64,10 @@ You can see it working in three ways:
 
 ## Progress
 
-Handoff (2026-10-24): all independent implementation, documentation and preliminary consumer checks are done. Milestones 1 and 2 remain open until the owner chooses the license/copyright holder and the final licensed tarball is checked. Milestone 3 awaits separate upload, publication and tag/push approvals. The license question is pending; do not choose a default.
+Resumed (2026-10-25): the owner selected BSD-3-Clause with Copyright (c) 2026 Nadeem Bitar. LICENSE and Cabal licensing metadata are added, and the initial release remains 0.1.0.0. The final licensed source distribution passes all 208 tests in an isolated Hackage-only project, cabal check is clean, and Nix build/check pass. The documentation archive is ready, with 100% Haddock coverage in all seven exposed modules. The owner approved the prepared version/changelog and instructed the agent to proceed with the full release on 2026-10-25. Publication is proceeding; token discovery is in progress.
 
-- [ ] Milestone 1: the package is release-shaped. That means a license the user chose, complete Cabal metadata, `README.md` and `CHANGELOG.md`, a README example that is compiled and checked by the test suite, and 100% Haddock coverage of every exposed module. `cabal check` reports no errors or warnings, and `cabal sdist` produces `typesafe-hs-0.1.0.0.tar.gz` containing `spec/openapi.json` and the golden files.
-- [ ] Milestone 2: the candidate is proven as a consumer will use it. The final bounds review is recorded. A scratch project outside the repository builds the tarball against Hackage only, with Baikai's bounds as constraints, and its test suite passes. `nix build` and `nix flake check` succeed in this repository.
+- [x] Milestone 1 (2026-10-25): the package has the owner-approved BSD-3-Clause LICENSE, complete metadata, dated changelog and compiled README example. All 208 checkout tests pass. Every exposed module reports 100% Haddock coverage, and the Hackage documentation archive is generated with linked source and quickjump. `cabal check` reports no errors or warnings. The 0.1.0.0 source distribution includes the specification, all golden files, license and documentation.
+- [x] Milestone 2 (2026-10-25): the final BSD-3-Clause source distribution builds and passes all 208 tests in a fresh extracted-tarball project outside the checkout with Hackage only, Baikai's unchanged bounds, and no local warning flags or source pins. The latest Hackage index is 2026-10-25T11:15:27Z. Registry releases and consumer bounds were rechecked; the recorded bounds table remains current. `nix build` and `nix flake check` succeed.
 - [ ] Milestone 3: the package is published. With the user's confirmation at each step, the name is re-verified as free, a package candidate and its documentation are uploaded and reviewed, the release is published, and the tag `v0.1.0.0` is created and pushed. The user is given a short note for Baikai's maintainers.
 
 
@@ -71,12 +76,16 @@ Handoff (2026-10-24): all independent implementation, documentation and prelimin
 Cabal 3.16 treats a local tarball package as global-style: `cabal test all` reported no project components. Building the explicit package target proceeds, but the test gate now extracts the exact tarball in the scratch directory and names that extracted package directory in cabal.project. This preserves Hackage-only resolution and proves the distribution contents without reading this checkout.
 
 
-The owner license question was asked asynchronously on 2026-10-24 and remains unanswered. No license is selected and no upload or tag is authorized. README/example work, metadata, bounds review and build preparation can proceed independently; Milestone 1 is not accepted until the owner chooses the license and copyright holder.
+The owner answered the pending license question on 2026-10-25: BSD-3-Clause; Copyright (c) 2026 Nadeem Bitar. The final distribution must include this approved LICENSE and pass the packaging and isolated consumer gates before release.
 
 
 
 
 ## Decision Log
+
+- Decision (2026-10-25): the owner approved the concrete 0.1.0.0 release with “go ahead” and stated that a token is configured. This authorizes the remaining release sequence, including commit, tag/push, candidate and permanent package/documentation upload, and GitHub release; do not ask for repeated confirmation of these already authorized steps.
+
+- Decision (2026-10-25): publish the initial 0.1.0.0 release under BSD-3-Clause with Copyright (c) 2026 Nadeem Bitar, following the owner's explicit selection. The changelog uses the release date 2026-10-25.
 
 - Decision (2026-10-24): the final http-client-tls minimum is 0.3.5, superseding the copied >=0.3 lower bound. getClientEnv uses newTlsManagerWith, introduced in 0.3.5. This is verified in the released Hackage 0.3.5 source and upstream tag http-client-tls/0.3.5. It still intersects Baikai's >=0.3 && <0.5 interval. Source ownership: `mori://snoyberg/http-client/packages/http-client-tls`, project-relative path `http-client/http-client-tls/Network/HTTP/Client/TLS.hs` (artifact-level URI pending).
 
@@ -124,11 +133,11 @@ Baikai's current Cabal bounds still match R12; read through `mori://shinzui/baik
 
 ## Outcomes & Retrospective
 
-Implementation and documentation are ready for owner licensing. The checkout passes 208 tests; all seven exposed modules report 100% Haddock coverage. The local documentation archive is `dist-newstyle/typesafe-hs-0.1.0.0-docs.tar.gz`; it has not been uploaded. The README drift mutation failed as intended and was restored. Nix build and flake checks passed. The normalized live specification still matches the approved baseline, and empty fetch bodies correctly fail the drift script with exit 2.
+Final release preparation resumed on 2026-10-25 after the owner selected BSD-3-Clause with Copyright (c) 2026 Nadeem Bitar. The licensed checkout builds and passes 208 tests. `cabal check` reports no errors or warnings. The source archive includes LICENSE, the specification, every golden fixture, every test module, README, changelog and drift script; development-only cabal.project is excluded. The normalized live specification still matches the approved baseline.
 
-A preliminary source distribution, including every fixture, README/example source and drift script, was extracted outside the checkout and passed all 208 tests with Hackage-only resolution, Baikai's bounds, scientific 0.3.10.0 and http-types 0.12.6. Its project contained no development warning flags or source-repository-package override. The scratch project is `/var/folders/xf/z_902qyd0dg5m6n8pjv1vk300000gn/T/typesafe-hs-unpacked-consumer-s2pfr1d3` for this session; the Concrete Steps reproduce it elsewhere.
+The exact source archive passed all 208 tests in a new extracted-tarball consumer project with Hackage as the only repository, Baikai's unchanged bounds, GHC 9.12.4, and the latest index at 2026-10-25T11:15:27Z. Its SHA-256 is `dfe95637953a2b7a973778720ac87bab48a77fcd966de4e1705267aedcb46c72`. The scratch project is `/var/folders/xf/z_902qyd0dg5m6n8pjv1vk300000gn/T/typesafe-hs-release-consumer-9vswpt5t`. It resolved current transitive releases including tls 2.4.13 and http2 5.4.10, demonstrating that it did not reuse a checkout-pinned solution. Nix build and both flake checks pass.
 
-This is preliminary evidence, not release acceptance: `cabal check` reports only the missing license, and no copyright holder or license has been assumed. After the owner's answer, add LICENSE and the Cabal licensing fields, rebuild the source distribution, rerun the final tarball check and cabal check, then request candidate-upload approval. Nothing has been uploaded, tagged or pushed. ADR 0007 records this release gate.
+The documentation archive `dist-newstyle/typesafe-hs-0.1.0.0-docs.tar.gz` is ready, with 100% Haddock coverage in all seven exposed modules. The owner has approved the concrete version/changelog and full release sequence. The configured token location is being resolved before upload. The package name remains available (HTTP 404). ADR 0007 now records the approved licensing, extracted-tarball test selection and released-source bounds checks. The completion distillation reviewed the MasterPlan and all five completed children; their durable wire, policy and conformance decisions are already captured in ADRs 0001–0006.
 
 
 ## Context and Orientation
@@ -230,7 +239,7 @@ At the end of Milestone 1, `cabal check` is clean, `cabal test` passes (includin
    This is the producer/consumer check for the whole initiative. It reproduces Baikai's release gate without touching Baikai. The scratch `cabal.project` deliberately sets no `ghc-options`, so the build proves the package compiles without the repository's local `-Werror=missing-fields`.
 3. **Check the Nix build.** Run `nix build` and `nix flake check` in the repository. `nix build` builds the package from nixpkgs' GHC 9.12.4 package set, and `nix flake check` runs the formatting and pre-commit checks configured in `nix/treefmt.nix` and `nix/pre-commit.nix`. If nixpkgs' `servant-client` falls outside our bounds, record it in Surprises & Discoveries. Fix it through `./flake.module.nix` (the unmanaged extension point; see `flake.module.nix.example`), never by editing `nix/haskell.nix`, which is managed by seihou, the project's template tool.
 
-**Milestone 3: publish, with confirmation at each outward-facing step.** Each sub-step either publishes something or changes shared state, so get the user's explicit "yes" immediately before each one. A "yes" for the candidate does not cover publishing.
+**Milestone 3: publish the approved release.** The owner's 2026-10-25 instruction to proceed authorizes this entire sequence. The earlier per-step confirmation workflow is superseded for this release; do not ask again for already authorized candidate upload, publication, tagging/pushing or GitHub release.
 
 1. **Re-check that the name is free.** If it has been taken, stop and ask the user to choose a new name. A new name would also touch `mori.dhall`, `nix/haskell.nix` and the MasterPlan.
 2. **Upload the candidate.** Upload the package candidate and its documentation. Ask the user to review the candidate page, including the rendered README, the module list and the documentation, and to confirm.
@@ -455,5 +464,7 @@ category:    AI, Web
 Revision note (2026-10-21): aligned with the haskell-jitsurei change set and the API idiom review. The surface summary now reflects the `NamedRoutes` `Routes` record, `NoFieldSelectors` with record-dot access, `Int` token counts, `assets` as a plain `Map` and `Generic` on every wire type. Milestones 1 and 2 now check that `-Werror=missing-fields` lives only in `cabal.project`, the README documents field access, and `servant-client-core` is bounded `>=0.20.3 && <0.22` only if it is a direct dependency.
 
 Revision note (2026-10-22): after the MasterPlan review, the Hackage facts name servant-client-core 0.20.3.0 as the newest release and mark the local servant checkout as ahead of Hackage, `http-client` is reviewed on the same condition as `servant-client-core`, and `TypeSafe.V1` is no longer described as re-enabling `FieldSelectors`.
+
+Revision note (2026-10-25): record owner-approved licensing, refresh registry and consumer-bound checks, and accept the final licensed archive consumer build; publication awaits authentication and the requested release approvals.
 
 Revision note (2026-10-24): implement the approved 21-schema surface, package a compiled README example, review current registry releases and upstream tags, and test extracted tarball contents because Cabal 3.16 does not select tests from global-style tarball targets. License selection and external release approvals remain pending.

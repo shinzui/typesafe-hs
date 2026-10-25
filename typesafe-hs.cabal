@@ -1,6 +1,9 @@
 cabal-version: 3.12
 name: typesafe-hs
 version: 0.1.0.0
+license: BSD-3-Clause
+license-file: LICENSE
+copyright: Copyright (c) 2026 Nadeem Bitar
 author: Nadeem Bitar
 maintainer: nadeem@gmail.com
 homepage: https://github.com/shinzui/typesafe-hs

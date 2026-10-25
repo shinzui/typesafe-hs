@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0.0 — 2026-10-24
+## 0.1.0.0 — 2026-10-25
 
 - Bind all 21 schemas in the OpenAPI 0.2.0 document fetched on 2026-10-24.
 - Encode ordered System One questions and choice criteria deterministically, with duplicate-reporting helpers and exact-byte goldens.
